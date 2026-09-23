@@ -18,6 +18,8 @@ import {
   profileIndexKey,
   profileKey,
   reportKey,
+  reportsIndexKey,
+  adminBlockedKey,
   searchFiltersKey,
   skipsKey,
   userId,
@@ -99,6 +101,7 @@ function searchMatches(filters: SearchFilters | undefined, candidate: Profile): 
 }
 
 async function excluded(store: DomainStore, viewer: number, candidate: number): Promise<boolean> {
+  if (await store.get(adminBlockedKey(viewer)) || await store.get(adminBlockedKey(candidate))) return true;
   const viewerProfile = await store.get<Profile>(profileKey(viewer));
   if (viewerProfile?.blockedUserIds?.includes(candidate)) return true;
   const ownLikes = await store.get<Like[]>(likesKey(viewer)) ?? [];
@@ -143,7 +146,9 @@ async function nextProfile(ctx: Ctx): Promise<void> {
 }
 
 async function ensureTarget(ctx: Ctx, target: number): Promise<Profile | undefined> {
-  const profile = await new DomainStore(ctx).get<Profile>(profileKey(target));
+  const store = new DomainStore(ctx);
+  if (await store.get(adminBlockedKey(target)) || await store.get(adminBlockedKey(userId(ctx)))) return undefined;
+  const profile = await store.get<Profile>(profileKey(target));
   if (!profile || !profile.visibility || target === userId(ctx)) return undefined;
   return profile;
 }
@@ -268,6 +273,8 @@ composer.on("message:text", async (ctx, next) => {
   const id = `${userId(ctx)}-${now()}`;
   const report = { id, reporter: userId(ctx), target, reason: ctx.session.reportReason ?? "other", details: ctx.message.text.trim(), snapshot: profile, at: now(), adminAction: "pending" };
   await store.set(reportKey(id), report);
+  const reportIds = await store.get<string[]>(reportsIndexKey()) ?? [];
+  if (!reportIds.includes(id)) await store.set(reportsIndexKey(), [...reportIds, id]);
   const admin = adminChatId(ctx);
   if (admin) {
     try { await ctx.api.sendMessage(admin, `Новая жалоба\nПричина: ${report.reason}\nПрофиль: ${profile.name}, ${profile.age}, ${profile.city}\nПодробности: ${report.details || "не указаны"}`); } catch { /* Owner delivery is best effort. */ }

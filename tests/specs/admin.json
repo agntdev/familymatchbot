@@ -1,0 +1,15 @@
+[
+  {
+    "name": "Admin panel stays hidden from regular users",
+    "steps": [
+      {
+        "send": { "text": "/admin" },
+        "expect": []
+      },
+      {
+        "send": { "callback": "admin:open" },
+        "expect": []
+      }
+    ]
+  }
+]
