@@ -193,6 +193,9 @@ export function likesKey(id: number): string { return `likes:${id}`; }
 export function likeKey(from: number, to: number): string { return `like:${from}:${to}`; }
 export function likeIndexKey(from: number): string { return `likes:index:${from}`; }
 export function skipsKey(id: number): string { return `skips:${id}`; }
+/** Durable discovery actions. A candidate is assessed once it is liked or passed. */
+export function viewedKey(id: number): string { return `viewed:${id}`; }
+export function viewedActionKey(viewer: number, candidate: number): string { return `viewed:${viewer}:${candidate}`; }
 export function matchesKey(id: number): string { return `matches:${id}`; }
 export function messagesKey(id: string): string { return `messages:${id}`; }
 export function blockKey(blocker: number, blocked: number): string { return `block:${blocker}:${blocked}`; }

@@ -22,6 +22,8 @@ import {
   adminBlockedKey,
   searchFiltersKey,
   skipsKey,
+  viewedActionKey,
+  viewedKey,
   userId,
   type Like,
   type Match,
@@ -77,6 +79,13 @@ async function recordEvent(ctx: Ctx, type: "view" | "like" | "skip", target: num
   }
 }
 
+/** Mark an assessment durably and idempotently, with an explicit index for bounded reads. */
+async function markAssessed(store: DomainStore, viewer: number, candidate: number, at = now()): Promise<void> {
+  await store.setIfAbsent(viewedActionKey(viewer, candidate), { viewer, candidate, at });
+  const viewed = await store.get<number[]>(viewedKey(viewer)) ?? [];
+  if (!viewed.includes(candidate)) await store.set(viewedKey(viewer), [...viewed, candidate]);
+}
+
 function ageMatches(viewer: Profile | undefined, candidate: Profile): boolean {
   if (!viewer) return true;
   if (viewer.preferredAgeFrom !== undefined && candidate.age < viewer.preferredAgeFrom) return false;
@@ -109,6 +118,8 @@ async function excluded(store: DomainStore, viewer: number, candidate: number): 
   if (ownLikes.some((like) => likeTo(like) === candidate && like.status !== "ignored")) return true;
   const skipped = await store.get<number[]>(skipsKey(viewer)) ?? [];
   if (skipped.includes(candidate)) return true;
+  const viewed = await store.get<number[]>(viewedKey(viewer)) ?? [];
+  if (viewed.includes(candidate)) return true;
   const theirSkips = await store.get<number[]>(skipsKey(candidate)) ?? [];
   if (theirSkips.includes(viewer)) return true;
   const matchIds = await store.get<string[]>(matchesKey(viewer)) ?? [];
@@ -130,7 +141,33 @@ async function sendCard(ctx: Ctx, profile: Profile): Promise<void> {
   }
 }
 
-export async function browseProfiles(ctx: Ctx): Promise<void> {
+function isPhotoMessage(message: unknown): boolean {
+  return typeof message === "object" && message !== null && "photo" in message;
+}
+
+/** Replace the tapped card in place so an action never appends a duplicate card. */
+async function replaceCard(ctx: Ctx, profile: Profile | undefined): Promise<void> {
+  const message = ctx.callbackQuery?.message;
+  const text = profile ? cardText(profile) : "Новых анкет пока нет";
+  const markup = profile
+    ? actionKeyboard(profile.userId)
+    : inlineKeyboard([
+      [inlineButton("🔎 Изменить поиск", "search:open")],
+      [inlineButton("Расширить поиск", "search:clear")],
+      [inlineButton("⬅️ В меню", "menu:main")],
+    ]);
+  if (isPhotoMessage(message)) {
+    if (profile?.photos[0]) {
+      await ctx.editMessageMedia({ type: "photo", media: profile.photos[0], caption: text }, { reply_markup: markup });
+    } else {
+      await ctx.editMessageCaption({ caption: text, reply_markup: markup });
+    }
+    return;
+  }
+  await ctx.editMessageText(text, { reply_markup: markup });
+}
+
+export async function browseProfiles(ctx: Ctx, replaceCurrent = false): Promise<void> {
   const store = new DomainStore(ctx);
   const ids = await store.get<number[]>(profileIndexKey()) ?? [];
   const mine = userId(ctx);
@@ -140,10 +177,12 @@ export async function browseProfiles(ctx: Ctx): Promise<void> {
     if (id === mine) continue;
     const profile = await store.get<Profile>(profileKey(id));
     if (!profile?.visibility || !ageMatches(viewer, profile) || !searchMatches(filters, profile) || await excluded(store, mine, id)) continue;
-    await sendCard(ctx, profile);
+    if (replaceCurrent) await replaceCard(ctx, profile);
+    else await sendCard(ctx, profile);
     return;
   }
-  await ctx.reply("Пока подходящих анкет нет — загляните позже.", { reply_markup: inlineKeyboard([[inlineButton("🔎 Изменить поиск", "search:open")], [inlineButton("Расширить поиск", "search:clear")], [inlineButton("⬅️ В меню", "menu:main")]]) });
+  if (replaceCurrent) await replaceCard(ctx, undefined);
+  else await ctx.reply("Новых анкет пока нет", { reply_markup: inlineKeyboard([[inlineButton("🔎 Изменить поиск", "search:open")], [inlineButton("Расширить поиск", "search:clear")], [inlineButton("⬅️ В меню", "menu:main")]]) });
 }
 
 async function ensureTarget(ctx: Ctx, target: number): Promise<Profile | undefined> {
@@ -163,8 +202,12 @@ async function createMatch(ctx: Ctx, target: number): Promise<Match | undefined>
   if (!mine || !theirs || !mine.visibility || !theirs.visibility) return undefined;
   if (mine.blockedUserIds?.includes(target) || theirs.blockedUserIds?.includes(me)) return undefined;
   const theirLikes = await store.get<Like[]>(likesKey(target)) ?? [];
+  const theirCanonicalLike = await store.get<Like>(likeKey(target, me));
+  if (theirCanonicalLike && !theirLikes.some((like) => likeTo(like) === me)) theirLikes.push(theirCanonicalLike);
   if (!theirLikes.some((like) => likeTo(like) === me && like.status !== "ignored")) return undefined;
   const ownLikes = await store.get<Like[]>(likesKey(me)) ?? [];
+  const ownCanonicalLike = await store.get<Like>(likeKey(me, target));
+  if (ownCanonicalLike && !ownLikes.some((like) => likeTo(like) === target)) ownLikes.push(ownCanonicalLike);
   for (const like of ownLikes) if (likeTo(like) === target) like.status = "matched";
   for (const like of theirLikes) if (likeTo(like) === me) like.status = "matched";
   await store.set(likesKey(me), ownLikes);
@@ -200,21 +243,27 @@ composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
   if (action === "pass") {
     const skipped = await store.get<number[]>(skipsKey(me)) ?? [];
     if (!skipped.includes(target)) await store.set(skipsKey(me), [...skipped, target]);
+    await markAssessed(store, me, target);
     await recordEvent(ctx, "skip", target);
-    await browseProfiles(ctx);
+    await browseProfiles(ctx, true);
     return;
   }
   const ownLikes = await store.get<Like[]>(likesKey(me)) ?? [];
-  if (!ownLikes.some((like) => likeTo(like) === target)) {
-    const newLike = makeLike(me, target, now());
-    const inserted = await store.setIfAbsent(likeKey(me, target), newLike);
-    if (inserted || !(await store.available())) {
-      ownLikes.push(newLike);
-      await store.set(likesKey(me), ownLikes);
-    }
-    const index = await store.get<number[]>(likeIndexKey(me)) ?? [];
-    if (!index.includes(target)) await store.set(likeIndexKey(me), [...index, target]);
-  }
+  const newLike = makeLike(me, target, now());
+  // The pair key is the canonical Like record and is the idempotency boundary.
+  // The per-user array remains as a compatibility/index projection for older
+  // records and the incoming-likes screen.
+  const previousCanonical = await store.get<Like>(likeKey(me, target));
+  if (previousCanonical?.status === "ignored") await store.set(likeKey(me, target), newLike);
+  else await store.setIfAbsent(likeKey(me, target), newLike);
+  const canonical = await store.get<Like>(likeKey(me, target));
+  const projected = ownLikes.find((like) => likeTo(like) === target);
+  if (projected?.status === "ignored") Object.assign(projected, canonical ?? newLike);
+  else if (!projected) ownLikes.push(canonical ?? newLike);
+  await store.set(likesKey(me), ownLikes);
+  const index = await store.get<number[]>(likeIndexKey(me)) ?? [];
+  if (!index.includes(target)) await store.set(likeIndexKey(me), [...index, target]);
+  await markAssessed(store, me, target, newLike.created_at);
   await recordEvent(ctx, "like", target);
   const match = await createMatch(ctx, target);
   if (match) {
@@ -222,7 +271,7 @@ composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
     if (mine) await notifyMutualMatch(ctx, me, profile, match.match_id);
     await notifyMutualMatch(ctx, target, mine ?? profile, match.match_id);
   }
-  await browseProfiles(ctx);
+  await browseProfiles(ctx, true);
 });
 
 composer.callbackQuery(/^browse:view:(\d+)$/, async (ctx) => {
