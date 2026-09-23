@@ -1,0 +1,25 @@
+[
+  {
+    "name": "A repeated callback is acknowledged without repeating the action",
+    "steps": [
+      {
+        "send": { "callback": "settings:open" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Настройте видимость профиля и удалите данные, когда захотите." }
+          }
+        ]
+      },
+      {
+        "send": { "callback": "settings:open" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Это действие уже выполнено. Откройте актуальный экран кнопкой ниже." }
+          }
+        ]
+      }
+    ]
+  }
+]

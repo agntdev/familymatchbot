@@ -54,11 +54,23 @@ export function createBot<S extends object>(
     ctx.answerCallbackQuery = (textOrOptions?: string | Parameters<Context["answerCallbackQuery"]>[0]) =>
       answer(textOrOptions as never).catch(() => true as never);
     const edit = ctx.editMessageText.bind(ctx);
-    ctx.editMessageText = ((...args: Parameters<Context["editMessageText"]>) =>
-      edit(...args).catch((error: unknown) => {
+    ctx.editMessageText = (async (...args: Parameters<Context["editMessageText"]>) => {
+      try {
+        return await edit(...args);
+      } catch (error: unknown) {
         if (error instanceof Error && /message is not modified/i.test(error.message)) return true as never;
+        // A callback can be attached to a photo or media group. Telegram cannot
+        // edit that message as text; keep the result visible in a new message.
+        if (error instanceof Error && /there is no text in the message/i.test(error.message)) {
+          try {
+            return await ctx.reply(args[0] as string, args[1] as never) as never;
+          } catch {
+            return true as never;
+          }
+        }
         throw error;
-      })) as Context["editMessageText"];
+      }
+    }) as Context["editMessageText"];
     await next();
   });
   bot.use(
@@ -68,6 +80,23 @@ export function createBot<S extends object>(
       storage: resolveSessionStorage<S>(opts.storage),
     }),
   );
+  // Telegram may deliver the same tap more than once, or a user may tap
+  // rapidly. Keep the acknowledgement fast and prevent a second callback from
+  // entering a write handler. Durable uniqueness remains in DomainStore keys.
+  bot.use(async (ctx, next) => {
+    const callback = ctx.callbackQuery;
+    if (!callback?.data) return next();
+    const at = Date.now();
+    const session = ctx.session as S & { lastCallback?: { data: string; at: number } };
+    const previous = session.lastCallback;
+    if (previous?.data === callback.data && at - previous.at < 1500) {
+      await ctx.answerCallbackQuery("Это действие уже выполнено.");
+      await ctx.reply("Это действие уже выполнено. Откройте актуальный экран кнопкой ниже.");
+      return;
+    }
+    session.lastCallback = { data: callback.data, at };
+    await next();
+  });
   // Active-user reporting (agnt-api migration 00069). No-op unless the platform
   // injected BOT_TELEMETRY_* at deploy — so dev, the test harness, and old bots
   // are byte-for-byte unchanged. Records salted user hashes only; best-effort.
