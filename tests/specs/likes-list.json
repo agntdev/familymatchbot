@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "See people who liked you; accept to create a match or ignore"
+              "text": "Пока никто не проявил симпатию — загляните позже."
             }
           }
         ],

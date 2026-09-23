@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Edit search filters, visibility, safety options, or delete account"
+              "text": "Здесь можно скрыть анкету или удалить данные."
             }
           }
         ],

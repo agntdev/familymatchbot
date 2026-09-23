@@ -1,17 +1,13 @@
 import { Composer } from "grammy";
+import type { Ctx } from "../bot.js";
+import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
+import { matchId, matchesKey, messagesKey, now, read, userId, write, type ChatMessage, type Profile } from "../domain/store.js";
 
-// SCAFFOLD — generated from the bot blueprint BEFORE the agent runs.
-// Keep a LIVE registration (.command / .callbackQuery / …) so this feature is
-// never an empty stub. Replace the reply body with real logic + copy; if you
-// change the user-facing text, update tests/specs to match EXACTLY.
-// Do NOT rewrite src/bot.ts — buildBot() already auto-loads this module.
-// Menu: wire this into /start via registerMainMenuItem({ label: "Messages", data: "conversations:list" }) if the toolkit exposes it.
-
-const composer = new Composer();
-
-composer.callbackQuery("conversations:list", async (ctx) => {
-  await ctx.answerCallbackQuery();
-  await ctx.reply("List active conversations available only with mutual matches");
-});
-
+registerMainMenuItem({ label: "Сообщения", data: "conversations:list", order: 50 });
+const composer = new Composer<Ctx>();
+composer.callbackQuery("conversations:list", async (ctx) => { await ctx.answerCallbackQuery(); await list(ctx); });
+composer.callbackQuery(/^conversation:open:(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.activeTarget = ctx.match[1]; const messages = await read<ChatMessage[]>(ctx, messagesKey(matchId(userId(ctx), ctx.match[1]))) ?? []; const other = await read<Profile>(ctx, `profile:${ctx.match[1]}`); for (const m of messages) if (m.to === userId(ctx)) m.read = true; await write(ctx, messagesKey(matchId(userId(ctx), ctx.match[1])), messages); await ctx.reply(`${other?.name ?? "Собеседник"}\n\n${messages.slice(-10).map((m) => `${m.from === userId(ctx) ? "Вы" : other?.name ?? "Собеседник"}: ${m.text}`).join("\n") || "Начните знакомство с доброго сообщения."}`, { reply_markup: inlineKeyboard([[inlineButton("Написать", "conversation:write")], [inlineButton("К сообщениям", "conversations:list")]]) }); });
+composer.callbackQuery("conversation:write", async (ctx) => { await ctx.answerCallbackQuery(); if (!ctx.session.activeTarget) { await ctx.reply("Сначала выберите разговор."); return; } ctx.session.step = "message:text"; await ctx.reply("Напишите сообщение — уважительный первый шаг всегда уместен.", { reply_markup: { force_reply: true as const, input_field_placeholder: "Ваше сообщение" } }); });
+composer.on("message:text", async (ctx, next) => { if (ctx.session.step !== "message:text" || !ctx.session.activeTarget) return next(); const target = ctx.session.activeTarget; const me = userId(ctx); const match = await read<{ active: boolean }>(ctx, `matches:${me}:${target}`); if (!match?.active) { ctx.session.step = undefined; await ctx.reply("Написать можно только человеку с взаимной симпатией."); return; } const key = messagesKey(matchId(me, target)); const messages = await read<ChatMessage[]>(ctx, key) ?? []; const msg: ChatMessage = { id: `${me}:${now()}`, from: me, to: target, text: ctx.message.text.trim(), at: now(), read: false }; if (!msg.text) { await ctx.reply("Сообщение не может быть пустым."); return; } messages.push(msg); await write(ctx, key, messages); ctx.session.step = undefined; try { await ctx.api.sendMessage(Number(target), `Новое сообщение:\n${msg.text}`); msg.read = false; await write(ctx, key, messages); await ctx.reply("Сообщение отправлено.", { reply_markup: inlineKeyboard([[inlineButton("Открыть разговор", `conversation:open:${target}`)]]) }); } catch { await ctx.reply("Не удалось доставить сообщение. Возможно, человек удалил аккаунт или заблокировал бота."); } });
+async function list(ctx: Ctx): Promise<void> { const ids = await read<string[]>(ctx, matchesKey(userId(ctx))) ?? []; if (!ids.length) { await ctx.reply("Пока нет взаимных симпатий — они появятся здесь.", { reply_markup: inlineKeyboard([[inlineButton("Смотреть анкеты", "browse:start")]]) }); return; } const buttons: { text: string; callback_data: string }[][] = []; for (const id of ids) { const p = await read<Profile>(ctx, `profile:${id}`); if (p) buttons.push([inlineButton(p.name, `conversation:open:${id}`)]); } await ctx.reply("Ваши разговоры", { reply_markup: inlineKeyboard(buttons.length ? buttons : [[inlineButton("Смотреть анкеты", "browse:start")]]) }); }
 export default composer;

@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "View and edit your profile, visibility and preferences"
+              "text": "У вас пока нет анкеты — давайте создадим её вместе."
             }
           }
         ],
