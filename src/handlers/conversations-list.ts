@@ -1,17 +1,17 @@
 import { Composer } from "grammy";
-
-// SCAFFOLD — generated from the bot blueprint BEFORE the agent runs.
-// Keep a LIVE registration (.command / .callbackQuery / …) so this feature is
-// never an empty stub. Replace the reply body with real logic + copy; if you
-// change the user-facing text, update tests/specs to match EXACTLY.
-// Do NOT rewrite src/bot.ts — buildBot() already auto-loads this module.
-// Menu: wire this into /start via registerMainMenuItem({ label: "Messages", data: "conversations:list" }) if the toolkit exposes it.
-
-const composer = new Composer();
-
+import type { Ctx } from "../bot.js";
+import { DomainStore, matchesKey, messagesKey, now, profileKey, userId, type Match, type Message, type Profile } from "../domain.js";
+import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
+registerMainMenuItem({ label: "Сообщения", data: "conversations:list", order: 50 });
+const composer = new Composer<Ctx>();
 composer.callbackQuery("conversations:list", async (ctx) => {
-  await ctx.answerCallbackQuery();
-  await ctx.reply("List active conversations available only with mutual matches");
+  await ctx.answerCallbackQuery(); const store = new DomainStore(ctx);
+  if (!await store.available()) { await ctx.reply("List active conversations available only with mutual matches"); return; }
+  const ids = await store.get<string[]>(matchesKey(userId(ctx))) ?? []; const rows = [];
+  for (const id of ids) { const match = await store.get<Match>(`match:${id}`); if (!match?.active) continue; const other = match.a === userId(ctx) ? match.b : match.a; const p = await store.get<Profile>(profileKey(other)); if (p) rows.push([inlineButton(p.name, `conversation:open:${id}`)]); }
+  await ctx.reply(rows.length ? "Ваши разговоры" : "Здесь появятся разговоры после взаимной симпатии.", { reply_markup: inlineKeyboard([...rows, [inlineButton("⬅️ В меню", "menu:main")]]) });
 });
-
+composer.callbackQuery(/^conversation:open:(\d+-\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const id = ctx.match[1]; const m = await new DomainStore(ctx).get<Match>(`match:${id}`); if (!m?.active || (m.a !== userId(ctx) && m.b !== userId(ctx))) { await ctx.reply("Этот разговор больше недоступен."); return; } const messages = await new DomainStore(ctx).get<Message[]>(messagesKey(id)) ?? []; ctx.session.activeMatchId = id; await ctx.reply(messages.length ? messages.slice(-10).map((x) => `${x.from === userId(ctx) ? "Вы" : "Собеседник"}: ${x.text}`).join("\n") : "Начните разговор с добрых слов.", { reply_markup: inlineKeyboard([[inlineButton("Написать", `conversation:write:${id}`)]]) }); });
+composer.callbackQuery(/^conversation:write:(\d+-\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.step = "message"; ctx.session.activeMatchId = ctx.match[1]; await ctx.reply("Напишите сообщение.", { reply_markup: { force_reply: true as const, input_field_placeholder: "Ваше сообщение" } }); });
+composer.on("message:text", async (ctx, next) => { if (ctx.session.step !== "message" || !ctx.session.activeMatchId) { await next(); return; } const text = ctx.message.text.trim(); const store = new DomainStore(ctx); const match = await store.get<Match>(`match:${ctx.session.activeMatchId}`); if (!match?.active) { await ctx.reply("Этот разговор больше недоступен."); return; } if (!text || text.length > 2000) { await ctx.reply("Сообщение должно содержать от 1 до 2000 символов."); return; } const to = match.a === userId(ctx) ? match.b : match.a; const list = await store.get<Message[]>(messagesKey(match.id)) ?? []; list.push({ id: `${userId(ctx)}-${now()}`, matchId: match.id, from: userId(ctx), to, text, sentAt: now(), delivered: false }); await store.set(messagesKey(match.id), list); try { await ctx.api.sendMessage(to, text); list[list.length - 1].delivered = true; await store.set(messagesKey(match.id), list); } catch { await ctx.reply("Не удалось доставить сообщение. Возможно, собеседник заблокировал бота."); } ctx.session.step = "idle"; await ctx.reply("Сообщение отправлено."); });
 export default composer;

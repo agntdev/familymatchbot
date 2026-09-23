@@ -1,17 +1,10 @@
 import { Composer } from "grammy";
-
-// SCAFFOLD — generated from the bot blueprint BEFORE the agent runs.
-// Keep a LIVE registration (.command / .callbackQuery / …) so this feature is
-// never an empty stub. Replace the reply body with real logic + copy; if you
-// change the user-facing text, update tests/specs to match EXACTLY.
-// Do NOT rewrite src/bot.ts — buildBot() already auto-loads this module.
-// Menu: wire this into /start via registerMainMenuItem({ label: "Settings", data: "settings:open" }) if the toolkit exposes it.
-
-const composer = new Composer();
-
-composer.callbackQuery("settings:open", async (ctx) => {
-  await ctx.answerCallbackQuery();
-  await ctx.reply("Edit search filters, visibility, safety options, or delete account");
-});
-
+import type { Ctx } from "../bot.js";
+import { DomainStore, matchesKey, profileKey, userId, type Profile } from "../domain.js";
+import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
+registerMainMenuItem({ label: "Настройки", data: "settings:open", order: 60 });
+const composer = new Composer<Ctx>();
+composer.callbackQuery("settings:open", async (ctx) => { await ctx.answerCallbackQuery(); const store = new DomainStore(ctx); if (!await store.available()) { await ctx.reply("Edit search filters, visibility, safety options, or delete account"); return; } await ctx.reply("Управляйте видимостью анкеты и безопасностью.", { reply_markup: inlineKeyboard([[inlineButton("Мой профиль", "profile:manage")], [inlineButton("Удалить аккаунт", "settings:delete")], [inlineButton("⬅️ В меню", "menu:main")]]) }); });
+composer.callbackQuery("settings:delete", async (ctx) => { await ctx.answerCallbackQuery(); await ctx.reply("Удалить анкету и сообщения без возможности восстановления?", { reply_markup: inlineKeyboard([[inlineButton("Удалить всё", "settings:delete:yes"), inlineButton("Оставить", "settings:open")]]) }); });
+composer.callbackQuery("settings:delete:yes", async (ctx) => { await ctx.answerCallbackQuery(); const id = userId(ctx); const store = new DomainStore(ctx); const profile = await store.get<Profile>(profileKey(id)); await store.delete(profileKey(id)); for (const match of await store.get<string[]>(matchesKey(id)) ?? []) { await store.delete(`messages:${match}`); await store.delete(`match:${match}`); } const admin = adminChatId(ctx); if (admin) { try { await ctx.api.sendMessage(admin, `Пользователь удалил аккаунт${profile ? `: ${profile.name}` : ""}.`); } catch { /* best effort */ } } await ctx.reply("Ваш аккаунт удалён. Спасибо за доверие.", { reply_markup: inlineKeyboard([[inlineButton("В меню", "menu:main")]]) }); });
 export default composer;
