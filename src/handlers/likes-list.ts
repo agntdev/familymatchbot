@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, adminBlockedKey, canonicalMatchId, likeTo, likesKey, makeMatch, matchesKey, matchKey, now, profileKey, userId, type Like, type Match, type Profile } from "../domain.js";
+import { DomainStore, adminBlockedKey, canonicalMatchId, eventsKey, likeTo, likesKey, makeMatch, matchesKey, matchKey, now, profileKey, userId, withTelegramDefaults, type Like, type Match, type Profile } from "../domain.js";
 import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 registerMainMenuItem({ label: "Вам понравились", data: "likes:list", order: 40 });
 const composer = new Composer<Ctx>();
@@ -8,6 +8,19 @@ const composer = new Composer<Ctx>();
 composer.callbackQuery("likes:list", async (ctx) => {
   await ctx.answerCallbackQuery();
   const store = new DomainStore(ctx);
+  const mutualIds = await store.get<string[]>(matchesKey(userId(ctx))) ?? [];
+  if (mutualIds.length) {
+    await ctx.reply("💕 Взаимные симпатии", { reply_markup: inlineKeyboard([[inlineButton("Открыть сообщения", "conversations:list")], [inlineButton("⬅️ В меню", "menu:main")]]) });
+    for (const matchId of mutualIds) {
+      const match = await store.get<Match>(matchKey(matchId));
+      if (!match?.active) continue;
+      const target = match.user_a_id === userId(ctx) ? match.user_b_id : match.user_a_id;
+      const profile = await store.get<Profile>(profileKey(target));
+      if (!profile) continue;
+      await ctx.reply(`${profile.name}, ${profile.age} — ${profile.city}`, { reply_markup: inlineKeyboard([[inlineButton("📱 Telegram", `likes:telegram:${target}`)], [inlineButton("💬 Написать сообщение", `conversation:open:${matchId}`)]]) });
+    }
+    return;
+  }
   const ids = await store.get<number[]>("profiles:index") ?? [];
   for (const id of ids) {
     if (id === userId(ctx)) continue;
@@ -20,7 +33,7 @@ composer.callbackQuery("likes:list", async (ctx) => {
 
 composer.callbackQuery(/^likes:(accept|ignore):(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery(); const action = ctx.match[1]; const target = Number(ctx.match[2]); const me = userId(ctx); const store = new DomainStore(ctx);
-  const targetLikes = await store.get<Like[]>(likesKey(target)) ?? []; const incoming = targetLikes.find((x) => x.to === me && x.status === "pending");
+  const targetLikes = await store.get<Like[]>(likesKey(target)) ?? []; const incoming = targetLikes.find((x) => likeTo(x) === me && x.status === "pending");
   if (!incoming) { await ctx.reply("Эта симпатия больше недоступна."); return; }
   if (await store.get(adminBlockedKey(me)) || await store.get(adminBlockedKey(target))) { await ctx.reply("Эта симпатия больше недоступна."); return; }
   incoming.status = action === "ignore" ? "ignored" : "matched"; await store.set(likesKey(target), targetLikes);
@@ -52,5 +65,26 @@ composer.callbackQuery(/^likes:(accept|ignore):(\d+)$/, async (ctx) => {
     if (ownProfile.photos[0]) await ctx.replyWithPhoto(ownProfile.photos[0], { caption: textFor(targetProfile), reply_markup: markup });
     else await ctx.reply(textFor(targetProfile), { reply_markup: markup });
   }
+});
+
+composer.callbackQuery(/^likes:telegram:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const requester = userId(ctx);
+  const target = Number(ctx.match[1]);
+  const store = new DomainStore(ctx);
+  const id = canonicalMatchId(requester, target);
+  const match = await store.get<Match>(matchKey(id));
+  if (!match?.active || !((match.user_a_id === requester && match.user_b_id === target) || (match.user_a_id === target && match.user_b_id === requester))) {
+    await ctx.reply("Telegram доступен только после взаимной симпатии.");
+    return;
+  }
+  const stored = await store.get<Profile>(profileKey(target));
+  const profile = stored ? withTelegramDefaults(stored) : undefined;
+  if (!profile?.showTelegramOnMatch) { await ctx.reply("Пользователь не разрешил показывать Telegram"); return; }
+  if (!profile.telegramUsername) { await ctx.reply("Пользователь не указал Telegram"); return; }
+  const audit = await store.get<Array<{ event: string; openedBy: number; target: number; at: number }>>(eventsKey()) ?? [];
+  audit.push({ event: "telegram_revealed", openedBy: requester, target, at: now() });
+  await store.set(eventsKey(), audit.slice(-1000));
+  await ctx.reply(`Telegram пользователя: https://t.me/${profile.telegramUsername}`);
 });
 export default composer;

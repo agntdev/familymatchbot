@@ -46,6 +46,21 @@ export function createBot<S extends object>(
   opts: CreateBotOptions<S>,
 ): Bot<BotContext<S>> {
   const bot = new Bot<BotContext<S>>(token);
+  // Telegram callback queries can expire while a slow storage/API operation is
+  // running. A stale acknowledgement must not turn into an unhandled update
+  // error. The same applies to harmless repeated edits of an unchanged menu.
+  bot.use(async (ctx, next) => {
+    const answer = ctx.answerCallbackQuery.bind(ctx);
+    ctx.answerCallbackQuery = (textOrOptions?: string | Parameters<Context["answerCallbackQuery"]>[0]) =>
+      answer(textOrOptions as never).catch(() => true as never);
+    const edit = ctx.editMessageText.bind(ctx);
+    ctx.editMessageText = ((...args: Parameters<Context["editMessageText"]>) =>
+      edit(...args).catch((error: unknown) => {
+        if (error instanceof Error && /message is not modified/i.test(error.message)) return true as never;
+        throw error;
+      })) as Context["editMessageText"];
+    await next();
+  });
   bot.use(
     session<S, BotContext<S>>({
       initial: opts.initial,
