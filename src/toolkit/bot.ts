@@ -74,17 +74,21 @@ export function createBot<S extends object>(
  * harness (the Bot API transport is faked there). `extra` appends bot-specific
  * commands beyond the `/start` + `/help` defaults.
  */
-export async function setDefaultCommands<S extends object>(
-  bot: Bot<BotContext<S>>,
-  extra: ReadonlyArray<{ command: string; description: string }> = [],
-): Promise<void> {
+export async function setDefaultCommands<S extends object>(bot: Bot<BotContext<S>>): Promise<void> {
   const commands = [
-    { command: "start", description: "Open the menu" },
-    { command: "help", description: "How this bot works" },
-    ...extra,
+    { command: "start", description: "Главное меню" },
+    { command: "profile", description: "Моя анкета" },
+    { command: "search", description: "Знакомства" },
+    { command: "likes", description: "Мои лайки" },
+    { command: "matches", description: "Взаимные симпатии" },
+    { command: "messages", description: "Сообщения" },
+    { command: "filters", description: "Фильтры поиска" },
+    { command: "vip", description: "VIP" },
+    { command: "settings", description: "Настройки" },
+    { command: "help", description: "Помощь" },
   ];
   try {
-    await bot.api.setMyCommands(commands);
+    await bot.api.setMyCommands(commands, { scope: { type: "default" }, language_code: "ru" });
   } catch {
     // Non-fatal: discoverability only. Never block startup on it.
   }

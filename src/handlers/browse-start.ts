@@ -129,7 +129,7 @@ async function sendCard(ctx: Ctx, profile: Profile): Promise<void> {
   }
 }
 
-async function nextProfile(ctx: Ctx): Promise<void> {
+export async function browseProfiles(ctx: Ctx): Promise<void> {
   const store = new DomainStore(ctx);
   const ids = await store.get<number[]>(profileIndexKey()) ?? [];
   const mine = userId(ctx);
@@ -194,7 +194,7 @@ async function notifyMatch(ctx: Ctx, recipient: number, matchedProfile: Profile)
   } catch { /* A blocked or deleted account must not break the match. */ }
 }
 
-composer.callbackQuery("browse:start", async (ctx) => { await ctx.answerCallbackQuery(); await nextProfile(ctx); });
+composer.callbackQuery("browse:start", async (ctx) => { await ctx.answerCallbackQuery(); await browseProfiles(ctx); });
 
 composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
@@ -208,7 +208,7 @@ composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
     const skipped = await store.get<number[]>(skipsKey(me)) ?? [];
     if (!skipped.includes(target)) await store.set(skipsKey(me), [...skipped, target]);
     await recordEvent(ctx, "skip", target);
-    await nextProfile(ctx);
+    await browseProfiles(ctx);
     return;
   }
   const ownLikes = await store.get<Like[]>(likesKey(me)) ?? [];
@@ -229,7 +229,7 @@ composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
     if (mine) await notifyMatch(ctx, me, profile);
     await notifyMatch(ctx, target, mine ?? profile);
   }
-  await nextProfile(ctx);
+  await browseProfiles(ctx);
 });
 
 composer.callbackQuery(/^browse:view:(\d+)$/, async (ctx) => {

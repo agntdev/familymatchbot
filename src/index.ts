@@ -8,8 +8,8 @@ async function main() {
     process.exit(1);
   }
   const bot = await buildBot(token);
-  // Publish the "/" command list to Telegram (discoverability). A button-first
-  // bot exposes only /start + /help; everything else is reached via menu buttons.
+  // Publish the localized command menu on every deploy so changed descriptions
+  // are applied to the default scope for all private chats.
   await setDefaultCommands(bot);
   bot.start();
 }

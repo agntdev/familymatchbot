@@ -1,0 +1,60 @@
+[
+  {
+    "name": "Russian command menu opens each destination",
+    "steps": [
+      {
+        "send": { "text": "/profile" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "У вас пока нет профиля — создайте его за несколько минут." } }]
+      },
+      {
+        "send": { "text": "/search" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Пока подходящих анкет нет — загляните позже." } }]
+      },
+      {
+        "send": { "text": "/likes" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Проверяю ваши симпатии." } }]
+      },
+      {
+        "send": { "text": "/matches" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Пока взаимных симпатий нет — знакомьтесь, и всё обязательно начнётся с доброго шага." } }]
+      },
+      {
+        "send": { "text": "/messages" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Открываю ваши разговоры." } }]
+      },
+      {
+        "send": { "text": "/filters" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Открываю фильтры поиска." } }]
+      },
+      {
+        "send": { "text": "/vip" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "VIP пока готовится. Мы сообщим, когда станут доступны дополнительные возможности." } }]
+      },
+      {
+        "send": { "text": "/settings" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Настройки профиля и безопасности доступны здесь." } }]
+      }
+    ]
+  },
+  {
+    "name": "A command interrupts profile creation",
+    "steps": [
+      {
+        "send": { "callback": "profile:create:start" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Серьёзные отношения начинаются с уважения. Вы ищете партнёра для серьёзных отношений и семьи?" } }]
+      },
+      {
+        "send": { "callback": "profile:consent:yes" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Как вас зовут?" } }]
+      },
+      {
+        "send": { "text": "/settings" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Настройки профиля и безопасности доступны здесь." } }]
+      },
+      {
+        "send": { "text": "Это не имя" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Sorry, I didn't understand that. Try /help." } }]
+      }
+    ]
+  }
+]
