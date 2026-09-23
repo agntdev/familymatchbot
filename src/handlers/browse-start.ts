@@ -59,7 +59,7 @@ function fullProfileText(profile: Profile): string {
   ].filter(Boolean);
   return `${profile.name}, ${profile.age}\n📍 ${profile.city}\n\n` +
     `Семейный статус: ${profile.maritalStatus}\n` +
-    `Образование: ${profile.education}\n` +
+    (profile.nationality ? `Национальность: ${profile.nationality}\n` : "") +
     `Профессия: ${profile.profession}\n` +
     `Рост: ${profile.height} см\n` +
     (optional.length ? `${optional.join("\n")}\n` : "") +

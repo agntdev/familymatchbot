@@ -9,7 +9,8 @@ export interface Profile {
   photos: string[];
   bio: string;
   maritalStatus: string;
-  education: string;
+  /** Optional nationality; legacy profiles may not have this field. */
+  nationality?: string | null;
   profession: string;
   height: number;
   purpose: string;
@@ -203,7 +204,8 @@ export function auditIndexKey(): string { return "admin-audit:index"; }
 export function auditKey(id: string): string { return `admin-audit:${id}`; }
 export function profileSummary(p: Profile): string {
   const photoLine = p.photos.length > 1 ? `\n📷 Фото: ${p.photos.length}` : "";
-  return `💛 ${p.name}, ${p.age}\n📍 ${p.city}\n💍 ${p.maritalStatus}\n🎓 ${p.education}\n💼 ${p.profession}\n📏 ${p.height} см${photoLine}\n\nО себе: ${p.bio}\n\nЦель знакомства: ${p.purpose}`;
+  const nationalityLine = p.nationality ? `\n🌍 Национальность: ${p.nationality}` : "";
+  return `💛 ${p.name}, ${p.age}\n📍 ${p.city}\n💍 ${p.maritalStatus}${nationalityLine}\n💼 ${p.profession}\n📏 ${p.height} см${photoLine}\n\nО себе: ${p.bio}\n\nЦель знакомства: ${p.purpose}`;
 }
 
 export function profileIndexKey(): string { return "profiles:index"; }
