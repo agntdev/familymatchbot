@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, now, profileKey, userId, type Profile } from "../domain.js";
+import { DomainStore, now, profileIndexKey, profileKey, userId, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 
 registerMainMenuItem({ label: "Создать профиль", data: "profile:create:start", order: 10 });
@@ -8,105 +8,59 @@ const composer = new Composer<Ctx>();
 const force = (placeholder: string) => ({ force_reply: true as const, input_field_placeholder: placeholder });
 const menu = inlineKeyboard([[inlineButton("⬅️ В меню", "menu:main")]]);
 
+type Draft = NonNullable<Ctx["session"]["draft"]>;
+function draft(ctx: Ctx): Draft { return (ctx.session.draft ??= { photos: [] }); }
+function choose(rows: ReturnType<typeof inlineButton>[][]): ReturnType<typeof inlineKeyboard> { return inlineKeyboard(rows); }
+function previewText(d: Draft): string {
+  return `Проверьте профиль\n\n💛 ${d.name}, ${d.age}\n📍 ${d.city}\n💍 ${d.maritalStatus}\n🎓 ${d.education}\n💼 ${d.profession}\n📏 ${d.height} см\n📷 Фото: ${d.photos?.length ?? 0}\n\nО себе: ${d.bio}\n\nЦель знакомства: ${d.purpose}`;
+}
+function previewKeyboard(): ReturnType<typeof inlineKeyboard> {
+  return choose([[inlineButton("Сохранить", "profile:create:save"), inlineButton("Изменить", "profile:create:edit")], [inlineButton("Отменить", "profile:create:cancel")]]);
+}
+function begin(ctx: Ctx, step: Ctx["session"]["step"]): void { ctx.session.step = step; ctx.session.expiresAt = now() + 15 * 60_000; }
+
 composer.callbackQuery("profile:create:start", async (ctx) => {
   await ctx.answerCallbackQuery();
-  ctx.session.step = "consent";
-  ctx.session.draft = { photos: [] };
-  await ctx.reply("Begin the guided profile creation wizard", { reply_markup: inlineKeyboard([[inlineButton("Да, ищу", "profile:consent:yes"), inlineButton("Нет", "profile:consent:no")]]) });
+  const existing = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx)));
+  if (existing) { await ctx.reply("У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: inlineKeyboard([[inlineButton("Мой профиль", "profile:manage")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; }
+  ctx.session.draft = { photos: [] }; begin(ctx, "consent");
+  await ctx.reply("Серьёзные отношения начинаются с уважения. Вы ищете партнёра для серьёзных отношений и семьи?", { reply_markup: choose([[inlineButton("Да, ищу", "profile:consent:yes"), inlineButton("Пока нет", "profile:consent:no")]]) });
 });
-
-composer.callbackQuery("profile:consent:yes", async (ctx) => {
-  await ctx.answerCallbackQuery(); ctx.session.step = "name";
-  await ctx.reply("Как вас зовут?", { reply_markup: force("Введите имя") });
-});
-composer.callbackQuery("profile:consent:no", async (ctx) => {
-  await ctx.answerCallbackQuery(); ctx.session.step = "idle";
-  await ctx.editMessageText("Понимаю. Профиль можно создать, когда вы будете готовы к серьёзным отношениям.", { reply_markup: menu });
-});
+composer.callbackQuery("profile:consent:yes", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "name"); await ctx.reply("Как вас зовут?", { reply_markup: force("Введите имя") }); });
+composer.callbackQuery("profile:consent:no", async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.editMessageText("Понимаю. Возвращайтесь, когда будете готовы к серьёзным отношениям.", { reply_markup: menu }); });
 
 composer.on("message:text", async (ctx, next) => {
-  const step = ctx.session.step;
-  const text = ctx.message.text.trim();
-  if (step === "name") {
-    if (text.length < 2 || text.length > 80) { await ctx.reply("Имя должно быть от 2 до 80 символов. Попробуйте ещё раз.", { reply_markup: force("Введите имя") }); return; }
-    ctx.session.draft = { ...(ctx.session.draft ?? {}), name: text }; ctx.session.step = "age";
-    await ctx.reply("Сколько вам лет? Нужен возраст от 18 лет.", { reply_markup: force("Введите возраст") }); return;
-  }
-  if (step === "age") {
-    const age = Number(text);
-    if (!Number.isInteger(age) || age < 18 || age > 120) { await ctx.reply("Для участия нужен возраст от 18 лет. Введите число ещё раз.", { reply_markup: force("Введите возраст") }); return; }
-    ctx.session.draft = { ...(ctx.session.draft ?? {}), age }; ctx.session.step = "gender";
-    await ctx.reply("Как вы себя определяете?", { reply_markup: inlineKeyboard([[inlineButton("Женщина", "profile:gender:f"), inlineButton("Мужчина", "profile:gender:m")], [inlineButton("Другое", "profile:gender:other")]]) }); return;
-  }
-  if (step === "city") {
-    if (text.length < 2 || text.length > 80) { await ctx.reply("Не удалось распознать город. Напишите его ещё раз.", { reply_markup: force("Введите город") }); return; }
-    ctx.session.draft = { ...(ctx.session.draft ?? {}), city: text }; ctx.session.step = "photos";
-    await ctx.reply("Отправьте от 1 до 6 фотографий. Можно прислать их сообщениями по одной."); return;
-  }
-  if (step === "bio") {
-    if (text.length < 10 || text.length > 500) { await ctx.reply("Расскажите о себе в 10–500 символах.", { reply_markup: force("Напишите коротко о себе") }); return; }
-    ctx.session.draft = { ...(ctx.session.draft ?? {}), bio: text }; ctx.session.step = "preferences";
-    await ctx.reply("Какой возраст партнёра вам подходит?", { reply_markup: inlineKeyboard([[inlineButton("18–30", "profile:pref:18:30"), inlineButton("25–40", "profile:pref:25:40")], [inlineButton("30–50", "profile:pref:30:50"), inlineButton("Любой", "profile:pref:any")]]) }); return;
-  }
-  if (step === "report") {
-    const target = ctx.session.activeTargetId;
-    const store = new DomainStore(ctx);
-    const profile = target ? await store.get<Profile>(profileKey(target)) : undefined;
-    if (target && profile) {
-      const id = `${userId(ctx)}-${now()}`;
-      await store.set(`report:${id}`, { id, reporter: userId(ctx), target, reason: ctx.session.reportReason ?? "Другое", details: text, snapshot: profile, at: now() });
-      const admin = adminChatId(ctx);
-      if (admin) { try { await ctx.api.sendMessage(admin, `Новая жалоба\nПричина: ${ctx.session.reportReason ?? "Другое"}\nПрофиль: ${profile.name}, ${profile.age}, ${profile.city}`); } catch { /* a blocked owner must not break the reporter's flow */ } }
-    }
-    ctx.session.step = "idle"; await ctx.reply("Спасибо, что сообщили. Мы проверим профиль и примем меры.", { reply_markup: menu }); return;
-  }
-  if (step === "message") {
-    await next(); return;
-  }
+  const text = ctx.message.text.trim(); const d = draft(ctx);
+  if (ctx.session.step === "name") { if (text.length < 2 || text.length > 80) { await ctx.reply("Имя должно быть от 2 до 80 символов.", { reply_markup: force("Введите имя") }); return; } d.name = text; begin(ctx, "age"); await ctx.reply("Сколько вам лет? Нужен возраст от 18 до 99 лет.", { reply_markup: force("Введите возраст") }); return; }
+  if (ctx.session.step === "age") { const age = Number(text); if (!Number.isInteger(age) || age < 18 || age > 99) { await ctx.reply("Укажите целый возраст от 18 до 99 лет.", { reply_markup: force("Введите возраст") }); return; } d.age = age; begin(ctx, "gender"); await ctx.reply("Как вы себя определяете?", { reply_markup: choose([[inlineButton("Женщина", "profile:gender:f"), inlineButton("Мужчина", "profile:gender:m")], [inlineButton("Другое", "profile:gender:other")]]) }); return; }
+  if (ctx.session.step === "city") { if (text.length < 2 || text.length > 80) { await ctx.reply("Напишите город от 2 до 80 символов.", { reply_markup: force("Введите город") }); return; } d.city = text; begin(ctx, "marital"); await ctx.reply("Каков ваш семейный статус?", { reply_markup: choose([[inlineButton("Не был(а) в браке", "profile:marital:single"), inlineButton("Разведён(а)", "profile:marital:divorced")], [inlineButton("Вдовец или вдова", "profile:marital:widowed")]]) }); return; }
+  if (["education", "profession", "about", "purpose"].includes(ctx.session.step ?? "")) { if (text.length < 2 || text.length > 500) { await ctx.reply("Ответ должен быть от 2 до 500 символов. Попробуйте ещё раз.", { reply_markup: force("Введите ответ") }); return; } const step = ctx.session.step; if (step === "education") d.education = text; if (step === "profession") d.profession = text; if (step === "about") d.bio = text; if (step === "purpose") d.purpose = text; const nextStep = step === "education" ? "profession" : step === "profession" ? "height" : step === "about" ? "purpose" : "preview"; begin(ctx, nextStep); if (nextStep === "profession") await ctx.reply("Чем вы занимаетесь?", { reply_markup: force("Напишите профессию") }); else if (nextStep === "height") await ctx.reply("Какой у вас рост в сантиметрах?", { reply_markup: force("Например, 170") }); else if (nextStep === "purpose") await ctx.reply("Что вы ищете в отношениях?", { reply_markup: force("Напишите коротко о цели") }); else if (d.photos?.[0]) await ctx.replyWithPhoto(d.photos[0], { caption: previewText(d), reply_markup: previewKeyboard() }); else await ctx.reply(previewText(d), { reply_markup: previewKeyboard() }); return; }
+  if (ctx.session.step === "height") { const height = Number(text); if (!Number.isInteger(height) || height < 120 || height > 230) { await ctx.reply("Укажите рост от 120 до 230 сантиметров.", { reply_markup: force("Например, 170") }); return; } d.height = height; begin(ctx, "about"); await ctx.reply("Расскажите немного о себе.", { reply_markup: force("Напишите о себе") }); return; }
+  if (ctx.session.step === "report") { await next(); return; }
   await next();
 });
 
-composer.callbackQuery(/^profile:gender:(f|m|other)$/, async (ctx) => {
-  await ctx.answerCallbackQuery(); const gender = ctx.match[1];
-  ctx.session.draft = { ...(ctx.session.draft ?? {}), gender }; ctx.session.step = "city";
-  await ctx.reply("В каком городе вы живёте?", { reply_markup: force("Введите город") });
-});
+composer.callbackQuery(/^profile:gender:(f|m|other)$/, async (ctx) => { await ctx.answerCallbackQuery(); draft(ctx).gender = ctx.match[1]; begin(ctx, "city"); await ctx.reply("В каком городе вы живёте?", { reply_markup: force("Введите город") }); });
+composer.callbackQuery(/^profile:marital:(single|divorced|widowed)$/, async (ctx) => { await ctx.answerCallbackQuery(); draft(ctx).maritalStatus = ({ single: "Не был(а) в браке", divorced: "Разведён(а)", widowed: "Вдовец или вдова" } as Record<string, string>)[ctx.match[1]]; begin(ctx, "photos"); await ctx.reply("Пришлите от 1 до 6 фотографий. Можно отправлять их по одной."); });
 
-composer.on("message:photo", async (ctx) => {
-  if (ctx.session.step !== "photos") return;
-  const photo = ctx.message.photo.at(-1);
-  if (!photo) { await ctx.reply("Не удалось получить фото. Отправьте его ещё раз."); return; }
-  const photos = [...(ctx.session.draft?.photos ?? []), photo.file_id].slice(0, 6);
-  ctx.session.draft = { ...(ctx.session.draft ?? {}), photos };
-  if (photos.length === 1) await ctx.reply("Фото получено. Добавьте ещё или нажмите «Готово».", { reply_markup: inlineKeyboard([[inlineButton("Готово", "profile:photos:done")]]) });
-  else if (photos.length < 6) await ctx.reply(`Фото ${photos.length}/6 получено. Добавьте ещё или нажмите «Готово».`, { reply_markup: inlineKeyboard([[inlineButton("Готово", "profile:photos:done")]]) });
+composer.on("message:photo", async (ctx, next) => {
+  if (ctx.session.step !== "photos" || !ctx.session.draft) { await next(); return; }
+  const photo = ctx.message.photo.at(-1); if (!photo) { await ctx.reply("Не удалось получить фото. Отправьте его ещё раз."); return; }
+  const photos = draft(ctx).photos ?? []; if (photos.length >= 6) { await ctx.reply("Можно добавить не больше 6 фотографий.", { reply_markup: choose([[inlineButton("Продолжить", "profile:photos:done")]]) }); return; }
+  photos.push(photo.file_id); draft(ctx).photos = photos;
+  await ctx.reply(`Фото добавлено: ${photos.length}/6.`, { reply_markup: choose([[inlineButton("Добавить ещё", "profile:photos:add")], [inlineButton("Готово", "profile:photos:done")]]) });
 });
+composer.callbackQuery("profile:photos:add", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "photos"); await ctx.reply("Пришлите следующую фотографию."); });
+composer.callbackQuery("profile:photos:done", async (ctx) => { await ctx.answerCallbackQuery(); if ((draft(ctx).photos?.length ?? 0) < 1) { await ctx.reply("Добавьте хотя бы одну фотографию — так вас легче узнать."); return; } begin(ctx, "education"); await ctx.reply("Какое у вас образование?", { reply_markup: force("Напишите образование") }); });
 
-composer.callbackQuery("profile:photos:done", async (ctx) => {
-  await ctx.answerCallbackQuery();
-  if ((ctx.session.draft?.photos?.length ?? 0) < 1) { await ctx.reply("Нужна хотя бы одна фотография, чтобы продолжить."); return; }
-  ctx.session.step = "bio"; await ctx.reply("Напишите несколько слов о себе.", { reply_markup: force("Напишите коротко о себе") });
+composer.callbackQuery("profile:create:edit", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "name"); await ctx.reply("Начнём с имени. Введите новое имя.", { reply_markup: force("Введите имя") }); });
+composer.callbackQuery("profile:create:cancel", async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.editMessageText("Создание профиля отменено. Вы сможете вернуться к нему в любой момент.", { reply_markup: menu }); });
+composer.callbackQuery("profile:create:save", async (ctx) => {
+  await ctx.answerCallbackQuery(); const d = draft(ctx); const required = d.name && d.age && d.city && d.photos?.length && d.maritalStatus && d.education && d.profession && d.height && d.bio && d.purpose;
+  if (!required) { await ctx.reply("Профиль ещё не заполнен. Вернитесь к изменению и добавьте все поля."); return; }
+  const timestamp = now(); const profile: Profile = { userId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, education: d.education!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, createdAt: timestamp, updatedAt: timestamp };
+  const store = new DomainStore(ctx); const saved = await store.set(profileKey(profile.userId), profile); const ids = await store.get<number[]>(profileIndexKey()) ?? []; if (!ids.includes(profile.userId)) await store.set(profileIndexKey(), [...ids, profile.userId]);
+  const admin = adminChatId(ctx); if (admin) { try { await ctx.api.sendMessage(admin, `Новая анкета: ${profile.name}, ${profile.age}, ${profile.city}`); } catch { /* delivery is best effort */ } }
+  ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.reply(saved ? "Профиль сохранён и опубликован. Желаю вам добрых знакомств." : "Профиль готов, но хранилище пока недоступно. Попробуйте сохранить ещё раз позже.", { reply_markup: menu });
 });
-
-composer.callbackQuery(/^profile:pref:(\d+):(\d+|any)$/, async (ctx) => {
-  await ctx.answerCallbackQuery(); const [, from, to] = ctx.match;
-  ctx.session.draft = { ...(ctx.session.draft ?? {}), preferredAgeFrom: to === "any" ? 18 : Number(from), preferredAgeTo: to === "any" ? 120 : Number(to), preferredGender: "any" };
-  ctx.session.step = "preview"; const d = ctx.session.draft;
-  await ctx.reply(`Проверьте профиль:\n\n${d?.name}, ${d?.age} — ${d?.city}\n\n${d?.bio}`, { reply_markup: inlineKeyboard([[inlineButton("Опубликовать", "profile:publish"), inlineButton("Изменить", "profile:create:start")]]) });
-});
-
-composer.callbackQuery("profile:publish", async (ctx) => {
-  await ctx.answerCallbackQuery(); const d = ctx.session.draft;
-  if (!d?.name || !d.age || !d.gender || !d.city || !d.bio || !(d.photos?.length)) { await ctx.reply("Профиль ещё не заполнен. Давайте начнём заново."); return; }
-  const profile: Profile = { userId: userId(ctx), name: d.name, age: d.age, gender: d.gender, city: d.city, photos: d.photos, bio: d.bio, relationshipIntent: "serious", preferredAgeFrom: d.preferredAgeFrom, preferredAgeTo: d.preferredAgeTo, preferredGender: d.preferredGender, visibility: true, createdAt: now(), updatedAt: now() };
-  const store = new DomainStore(ctx);
-  const saved = await store.set(profileKey(profile.userId), profile);
-  const index = await store.get<number[]>("profiles:index") ?? [];
-  if (!index.includes(profile.userId)) await store.set("profiles:index", [...index, profile.userId]);
-  const admin = adminChatId(ctx);
-  if (admin) { try { await ctx.api.sendMessage(admin, `Новая анкета: ${profile.name}, ${profile.age}, ${profile.city}`); } catch { /* delivery is best effort */ } }
-  ctx.session.step = "idle"; ctx.session.draft = undefined;
-  await ctx.reply(saved ? "Готово — ваша анкета опубликована. Теперь можно знакомиться." : "Готово — анкета опубликована в этом сеансе. Хранилище пока не подключено.", { reply_markup: menu });
-});
-
 export default composer;

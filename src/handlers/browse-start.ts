@@ -1,14 +1,14 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, likesKey, matchesKey, now, profileKey, profileSummary, userId, type Like, type Match, type Profile } from "../domain.js";
-import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
+import { DomainStore, likesKey, matchesKey, now, profileKey, profileSummary, reportKey, userId, type Like, type Match, type Profile } from "../domain.js";
+import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 
 registerMainMenuItem({ label: "Знакомства", data: "browse:start", order: 20 });
 const composer = new Composer<Ctx>();
 const back = inlineKeyboard([[inlineButton("⬅️ В меню", "menu:main")]]);
 
 async function nextProfile(ctx: Ctx): Promise<void> {
-  const store = new DomainStore(ctx); if (!await store.available()) { await ctx.reply("Open the discovery queue (one profile card at a time)"); return; } const ids = await store.get<number[]>("profiles:index") ?? [];
+  const store = new DomainStore(ctx); const ids = await store.get<number[]>("profiles:index") ?? [];
   const mine = userId(ctx); const my = await store.get<Profile>(profileKey(mine));
   for (const id of ids) {
     if (id === mine) continue;
@@ -37,4 +37,12 @@ composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
 composer.callbackQuery(/^browse:view:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const p = await new DomainStore(ctx).get<Profile>(profileKey(Number(ctx.match[1]))); await ctx.reply(p ? profileSummary(p) : "Эта анкета больше недоступна.", { reply_markup: back }); });
 composer.callbackQuery(/^browse:report:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.activeTargetId = Number(ctx.match[1]); ctx.session.step = "report"; await ctx.reply("Что вас насторожило?", { reply_markup: inlineKeyboard([[inlineButton("Спам", "report:reason:spam"), inlineButton("Фото", "report:reason:photos")], [inlineButton("Фальшивый профиль", "report:reason:fake"), inlineButton("Оскорбления", "report:reason:harassment")], [inlineButton("Другое", "report:reason:other")]]) }); });
 composer.callbackQuery(/^report:reason:(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.reportReason = ctx.match[1]; ctx.session.step = "report"; await ctx.reply("Если хотите, добавьте подробности одним сообщением.", { reply_markup: { force_reply: true, input_field_placeholder: "Опишите ситуацию" } }); });
+composer.on("message:text", async (ctx, next) => {
+  if (ctx.session.step !== "report") { await next(); return; }
+  const target = ctx.session.activeTargetId; const store = new DomainStore(ctx); const profile = target ? await store.get<Profile>(profileKey(target)) : undefined;
+  if (!target || !profile) { ctx.session.step = "idle"; await ctx.reply("Эта анкета больше недоступна.", { reply_markup: back }); return; }
+  const id = `${userId(ctx)}-${now()}`; const report = { id, reporter: userId(ctx), target, reason: ctx.session.reportReason ?? "other", details: ctx.message.text.trim(), snapshot: profile, at: now(), adminAction: "pending" };
+  await store.set(reportKey(id), report); const admin = adminChatId(ctx); if (admin) { try { await ctx.api.sendMessage(admin, `Новая жалоба\nПричина: ${report.reason}\nПрофиль: ${profile.name}, ${profile.age}, ${profile.city}\nПодробности: ${report.details || "не указаны"}`); } catch { /* owner delivery is best effort */ } }
+  ctx.session.step = "idle"; ctx.session.reportReason = undefined; await ctx.reply("Спасибо, что сообщили. Мы проверим профиль и позаботимся о безопасности.", { reply_markup: back });
+});
 export default composer;

@@ -6,7 +6,6 @@ registerMainMenuItem({ label: "Сообщения", data: "conversations:list", 
 const composer = new Composer<Ctx>();
 composer.callbackQuery("conversations:list", async (ctx) => {
   await ctx.answerCallbackQuery(); const store = new DomainStore(ctx);
-  if (!await store.available()) { await ctx.reply("List active conversations available only with mutual matches"); return; }
   const ids = await store.get<string[]>(matchesKey(userId(ctx))) ?? []; const rows = [];
   for (const id of ids) { const match = await store.get<Match>(`match:${id}`); if (!match?.active) continue; const other = match.a === userId(ctx) ? match.b : match.a; const p = await store.get<Profile>(profileKey(other)); if (p) rows.push([inlineButton(p.name, `conversation:open:${id}`)]); }
   await ctx.reply(rows.length ? "Ваши разговоры" : "Здесь появятся разговоры после взаимной симпатии.", { reply_markup: inlineKeyboard([...rows, [inlineButton("⬅️ В меню", "menu:main")]]) });
