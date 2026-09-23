@@ -22,6 +22,7 @@ export interface Profile {
   preferredGender?: string;
   blockedUserIds?: number[];
   visibility: boolean;
+  vip?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -179,6 +180,11 @@ export function matchesKey(id: number): string { return `matches:${id}`; }
 export function messagesKey(id: string): string { return `messages:${id}`; }
 export function blockKey(blocker: number, blocked: number): string { return `block:${blocker}:${blocked}`; }
 export function blocksKey(blocker: number): string { return `blocks:${blocker}`; }
+export function adminBlockedKey(id: number): string { return `admin-blocked:${id}`; }
+export function adminBlockedIndexKey(): string { return "admin-blocked:index"; }
+export function reportsIndexKey(): string { return "reports:index"; }
+export function auditIndexKey(): string { return "admin-audit:index"; }
+export function auditKey(id: string): string { return `admin-audit:${id}`; }
 export function profileSummary(p: Profile): string {
   const photoLine = p.photos.length > 1 ? `\n📷 Фото: ${p.photos.length}` : "";
   return `💛 ${p.name}, ${p.age}\n📍 ${p.city}\n💍 ${p.maritalStatus}\n🎓 ${p.education}\n💼 ${p.profession}\n📏 ${p.height} см${photoLine}\n\nО себе: ${p.bio}\n\nЦель знакомства: ${p.purpose}`;

@@ -1,7 +1,7 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import {
-  DomainStore, blockKey, blocksKey, matchA, matchB, matchesKey, matchKey,
+  DomainStore, adminBlockedKey, blockKey, blocksKey, matchA, matchB, matchesKey, matchKey,
   messagesKey, now, profileKey, reportKey, userId,
   type Match, type Message, type Profile,
 } from "../domain.js";
@@ -24,7 +24,7 @@ function isUnread(message: Message, me: number): boolean {
 }
 
 async function blocked(store: DomainStore, me: number, other: number): Promise<boolean> {
-  return Boolean(await store.get(blockKey(me, other)) || await store.get(blockKey(other, me)));
+  return Boolean(await store.get(adminBlockedKey(me)) || await store.get(adminBlockedKey(other)) || await store.get(blockKey(me, other)) || await store.get(blockKey(other, me)));
 }
 
 async function activeMatch(ctx: Ctx, id: string): Promise<{ store: DomainStore; match: Match; other: number } | undefined> {
@@ -194,6 +194,8 @@ composer.callbackQuery(/^conversation:report:(\d+-\d+)$/, async (ctx) => {
   const reportId = `${userId(ctx)}-${other}-${now()}`;
   const report = { id: reportId, reporter: userId(ctx), target: other, chatId: match.match_id, reason: "conversation", details: "Жалоба из разговора", messages: messages.slice(-20), at: now(), snapshot: await store.get<Profile>(profileKey(other)), adminAction: "pending" };
   await store.set(reportKey(reportId), report);
+  const reportIds = await store.get<string[]>("reports:index") ?? [];
+  if (!reportIds.includes(reportId)) await store.set("reports:index", [...reportIds, reportId]);
   const admin = adminChatId(ctx);
   if (admin) {
     const transcript = report.messages.map((message: Message) => `${message.from === userId(ctx) ? "Жалующийся" : "Собеседник"} · ${messageTime(message.sentAt)}\n${message.text}`).join("\n\n");
