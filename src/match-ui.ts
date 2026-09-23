@@ -2,8 +2,7 @@ import type { Ctx } from "./bot.js";
 import { canonicalMatchId, withTelegramDefaults, type Profile } from "./domain.js";
 import { inlineButton, inlineKeyboard, urlButton } from "./toolkit/index.js";
 
-export const MUTUAL_MATCH_TEXT = "💕 У вас взаимная симпатия! Теперь вы можете связаться друг с другом в Telegram";
-export const TELEGRAM_FALLBACK_TEXT = "Пользователь не указал Telegram username. Вы можете отправить ему сообщение через внутренние сообщения бота.";
+export const MUTUAL_MATCH_TEXT = "💕 У вас взаимная симпатия!";
 
 /**
  * Contact details are deliberately derived from the profile being revealed,
@@ -12,9 +11,9 @@ export const TELEGRAM_FALLBACK_TEXT = "Пользователь не указа�
  */
 export function contactArea(profile: Profile, matchId: string): { text: string; markup: ReturnType<typeof inlineKeyboard> } {
   const partner = withTelegramDefaults(profile);
-  if (partner.telegramUsername && partner.showTelegramOnMatch) {
+  if (partner.telegramUsername) {
     return {
-      text: `@${partner.telegramUsername}`,
+      text: `📱 Telegram: @${partner.telegramUsername}`,
       markup: inlineKeyboard([
         [urlButton("💬 Открыть Telegram", `tg://resolve?domain=${partner.telegramUsername}`)],
         [urlButton("Открыть в браузере", `https://t.me/${partner.telegramUsername}`)],
@@ -22,24 +21,22 @@ export function contactArea(profile: Profile, matchId: string): { text: string; 
     };
   }
   return {
-    text: TELEGRAM_FALLBACK_TEXT,
-    markup: inlineKeyboard([[inlineButton("✉️ Написать в боте", `conversation:open:${matchId}`)]]),
+    text: "📱 Telegram: не указан",
+    markup: inlineKeyboard([]),
   };
 }
 
 export function mutualMessage(profile: Profile, matchId: string): { text: string; markup: ReturnType<typeof inlineKeyboard> } {
   const contact = contactArea(profile, matchId);
-  return { text: `${MUTUAL_MATCH_TEXT}\n\n${contact.text}`, markup: contact.markup };
+  return { text: MUTUAL_MATCH_TEXT, markup: inlineKeyboard([]) };
 }
 
 export async function notifyMutualMatch(ctx: Ctx, recipient: number, matchedProfile: Profile, matchId = canonicalMatchId(recipient, ctx.from?.id ?? recipient)): Promise<void> {
   const message = mutualMessage(matchedProfile, matchId);
   try {
-    if (matchedProfile.photos[0]) {
-      await ctx.api.sendPhoto(recipient, matchedProfile.photos[0], { caption: message.text, reply_markup: message.markup });
-    } else {
-      await ctx.api.sendMessage(recipient, message.text, { reply_markup: message.markup });
-    }
+    await ctx.api.sendMessage(recipient, message.text);
+    const contact = contactArea(matchedProfile, matchId);
+    await ctx.api.sendMessage(recipient, contact.text, { reply_markup: contact.markup });
   } catch {
     // A participant may have blocked or deleted the bot. The match remains
     // usable through the other participant's chat and internal messaging.

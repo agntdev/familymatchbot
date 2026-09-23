@@ -2,7 +2,7 @@ import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import { DomainStore, adminBlockedKey, canonicalMatchId, likeTo, likesKey, makeMatch, matchesKey, matchKey, now, profileKey, userId, type Like, type Match, type Profile } from "../domain.js";
 import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
-import { contactArea, notifyMutualMatch } from "../match-ui.js";
+import { notifyMutualMatch } from "../match-ui.js";
 registerMainMenuItem({ label: "Вам понравились", data: "likes:list", order: 40 });
 const composer = new Composer<Ctx>();
 
@@ -18,8 +18,7 @@ composer.callbackQuery("likes:list", async (ctx) => {
       const target = match.user_a_id === userId(ctx) ? match.user_b_id : match.user_a_id;
       const profile = await store.get<Profile>(profileKey(target));
       if (!profile) continue;
-      const contact = contactArea(profile, matchId);
-      await ctx.reply(`${profile.name}, ${profile.age} — ${profile.city}\n\n${contact.text}`, { reply_markup: contact.markup });
+      await ctx.reply(`${profile.name}, ${profile.age} — ${profile.city}`, { reply_markup: inlineKeyboard([[inlineButton("Открыть сообщения", `conversation:open:${matchId}`)]]) });
     }
     return;
   }
@@ -62,9 +61,7 @@ composer.callbackQuery(/^likes:(accept|ignore):(\d+)$/, async (ctx) => {
   }
   if (!existing?.active) {
     await notifyMutualMatch(ctx, target, ownProfile, match.match_id);
-    const message = contactArea(targetProfile, match.match_id);
-    if (targetProfile.photos[0]) await ctx.replyWithPhoto(targetProfile.photos[0], { caption: `💕 У вас взаимная симпатия! Теперь вы можете связаться друг с другом в Telegram\n\n${message.text}`, reply_markup: message.markup });
-    else await ctx.reply(`💕 У вас взаимная симпатия! Теперь вы можете связаться друг с другом в Telegram\n\n${message.text}`, { reply_markup: message.markup });
+    await notifyMutualMatch(ctx, me, targetProfile, match.match_id);
   }
 });
 
@@ -79,9 +76,6 @@ composer.callbackQuery(/^likes:telegram:(\d+)$/, async (ctx) => {
     await ctx.reply("Telegram доступен только после взаимной симпатии.");
     return;
   }
-  const profile = await store.get<Profile>(profileKey(target));
-  if (!profile) { await ctx.reply("Профиль собеседника больше недоступен."); return; }
-  const contact = contactArea(profile, id);
-  await ctx.reply(contact.text, { reply_markup: contact.markup });
+  await ctx.reply("Контакт был отправлен сразу после взаимной симпатии.");
 });
 export default composer;

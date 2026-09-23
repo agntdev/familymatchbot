@@ -21,9 +21,9 @@ export interface Profile {
   preferredAgeTo?: number;
   preferredGender?: string;
   /** Optional contact sharing, disabled unless the user explicitly opts in. */
-  telegramUsername: string;
+  telegramUsername: string | null;
   showTelegramOnMatch: boolean;
-  telegram_username?: string;
+  telegram_username?: string | null;
   show_telegram_on_match?: boolean;
   blockedUserIds?: number[];
   visibility: boolean;
@@ -219,13 +219,20 @@ export function eventsKey(): string { return "events:index"; }
 export function withTelegramDefaults(profile: Profile): Profile {
   return {
     ...profile,
-    telegramUsername: profile.telegramUsername || profile.telegram_username || "",
+    telegramUsername: profile.telegramUsername || profile.telegram_username || null,
     showTelegramOnMatch: profile.showTelegramOnMatch === true || profile.show_telegram_on_match === true,
   };
 }
 
 export function validTelegramUsername(value: string): boolean {
   return /^[A-Za-z0-9_]{5,32}$/.test(value);
+}
+
+/** Accept the public @ form and return the canonical username used by Telegram URLs. */
+export function normalizeTelegramUsername(value: string): string | null {
+  const trimmed = value.trim();
+  if (!/^@[A-Za-z0-9_]{5,32}$/.test(trimmed)) return null;
+  return trimmed.slice(1);
 }
 
 export function likeFrom(value: Like): number { return value.from_user_id ?? value.from ?? 0; }
