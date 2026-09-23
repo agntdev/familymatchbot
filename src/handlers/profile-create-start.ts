@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, now, profileIndexKey, profileKey, userId, type Profile } from "../domain.js";
+import { DomainStore, normalizeTelegramUsername, now, profileIndexKey, profileKey, userId, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 
 registerMainMenuItem({ label: "Создать профиль", data: "profile:create:start", order: 10 });
@@ -12,12 +12,17 @@ type Draft = NonNullable<Ctx["session"]["draft"]>;
 function draft(ctx: Ctx): Draft { return (ctx.session.draft ??= { photos: [] }); }
 function choose(rows: ReturnType<typeof inlineButton>[][]): ReturnType<typeof inlineKeyboard> { return inlineKeyboard(rows); }
 function previewText(d: Draft): string {
-  return `Проверьте профиль\n\n💛 ${d.name}, ${d.age}\n📍 ${d.city}\n💍 ${d.maritalStatus}\n🎓 ${d.education}\n💼 ${d.profession}\n📏 ${d.height} см\n📷 Фото: ${d.photos?.length ?? 0}\n\nО себе: ${d.bio}\n\nЦель знакомства: ${d.purpose}`;
+  const telegram = d.telegramUsername ? `📱 Telegram: @${d.telegramUsername}` : "📱 Telegram: не указан";
+  return `Проверьте профиль\n\n💛 ${d.name}, ${d.age}\n📍 ${d.city}\n💍 ${d.maritalStatus}\n🎓 ${d.education}\n💼 ${d.profession}\n📏 ${d.height} см\n📷 Фото: ${d.photos?.length ?? 0}\n${telegram}\n\nО себе: ${d.bio}\n\nЦель знакомства: ${d.purpose}`;
 }
 function previewKeyboard(): ReturnType<typeof inlineKeyboard> {
   return choose([[inlineButton("Сохранить", "profile:create:save"), inlineButton("Изменить", "profile:create:edit")], [inlineButton("Отменить", "profile:create:cancel")]]);
 }
 function begin(ctx: Ctx, step: Ctx["session"]["step"]): void { ctx.session.step = step; ctx.session.expiresAt = now() + 15 * 60_000; }
+const telegramPrompt = "Пожалуйста, укажите ваш Telegram username в формате @username";
+const telegramKeyboard = () => choose([[inlineButton("Подтвердить", "profile:telegram:confirm"), inlineButton("Изменить", "profile:telegram:change")]]);
+const finalTelegramKeyboard = () => choose([[inlineButton("Подтвердить", "profile:telegram:final"), inlineButton("Изменить", "profile:telegram:change")]]);
+const skipKeyboard = { keyboard: [[{ text: "Пропустить" }]], resize_keyboard: true, one_time_keyboard: true };
 
 composer.callbackQuery("profile:create:start", async (ctx) => {
   await ctx.answerCallbackQuery();
@@ -34,14 +39,33 @@ composer.on("message:text", async (ctx, next) => {
   if (ctx.session.step === "name") { if (text.length < 2 || text.length > 80) { await ctx.reply("Имя должно быть от 2 до 80 символов.", { reply_markup: force("Введите имя") }); return; } d.name = text; begin(ctx, "age"); await ctx.reply("Сколько вам лет? Нужен возраст от 18 до 99 лет.", { reply_markup: force("Введите возраст") }); return; }
   if (ctx.session.step === "age") { const age = Number(text); if (!Number.isInteger(age) || age < 18 || age > 99) { await ctx.reply("Укажите целый возраст от 18 до 99 лет.", { reply_markup: force("Введите возраст") }); return; } d.age = age; begin(ctx, "gender"); await ctx.reply("Как вы себя определяете?", { reply_markup: choose([[inlineButton("Женщина", "profile:gender:f"), inlineButton("Мужчина", "profile:gender:m")], [inlineButton("Другое", "profile:gender:other")]]) }); return; }
   if (ctx.session.step === "city") { if (text.length < 2 || text.length > 80) { await ctx.reply("Напишите город от 2 до 80 символов.", { reply_markup: force("Введите город") }); return; } d.city = text; begin(ctx, "marital"); await ctx.reply("Каков ваш семейный статус?", { reply_markup: choose([[inlineButton("Не был(а) в браке", "profile:marital:single"), inlineButton("В отношениях", "profile:marital:relationship")], [inlineButton("Разведён(а)", "profile:marital:divorced"), inlineButton("Вдовец или вдова", "profile:marital:widowed")]]) }); return; }
-  if (["education", "profession", "about", "purpose"].includes(ctx.session.step ?? "")) { if (text.length < 2 || text.length > 500) { await ctx.reply("Ответ должен быть от 2 до 500 символов. Попробуйте ещё раз.", { reply_markup: force("Введите ответ") }); return; } const step = ctx.session.step; if (step === "education") d.education = text; if (step === "profession") d.profession = text; if (step === "about") d.bio = text; if (step === "purpose") d.purpose = text; const nextStep = step === "education" ? "profession" : step === "profession" ? "height" : step === "about" ? "purpose" : "preview"; begin(ctx, nextStep); if (nextStep === "profession") await ctx.reply("Чем вы занимаетесь?", { reply_markup: force("Напишите профессию") }); else if (nextStep === "height") await ctx.reply("Какой у вас рост в сантиметрах?", { reply_markup: force("Например, 170") }); else if (nextStep === "purpose") await ctx.reply("Что вы ищете в отношениях?", { reply_markup: force("Напишите коротко о цели") }); else if (d.photos?.[0]) await ctx.replyWithPhoto(d.photos[0], { caption: previewText(d), reply_markup: previewKeyboard() }); else await ctx.reply(previewText(d), { reply_markup: previewKeyboard() }); return; }
+  if (["education", "profession", "about", "purpose"].includes(ctx.session.step ?? "")) { if (text.length < 2 || text.length > 500) { await ctx.reply("Ответ должен быть от 2 до 500 символов. Попробуйте ещё раз.", { reply_markup: force("Введите ответ") }); return; } const step = ctx.session.step; if (step === "education") d.education = text; if (step === "profession") d.profession = text; if (step === "about") d.bio = text; if (step === "purpose") d.purpose = text; const nextStep = step === "education" ? "profession" : step === "profession" ? "height" : step === "about" ? "purpose" : "telegram"; begin(ctx, nextStep); if (nextStep === "profession") await ctx.reply("Чем вы занимаетесь?", { reply_markup: force("Напишите профессию") }); else if (nextStep === "height") await ctx.reply("Какой у вас рост в сантиметрах?", { reply_markup: force("Например, 170") }); else if (nextStep === "purpose") await ctx.reply("Что вы ищете в отношениях?", { reply_markup: force("Напишите коротко о цели") }); else await askTelegram(ctx); return; }
   if (ctx.session.step === "height") { const height = Number(text); if (!Number.isInteger(height) || height < 120 || height > 230) { await ctx.reply("Укажите рост от 120 до 230 сантиметров.", { reply_markup: force("Например, 170") }); return; } d.height = height; begin(ctx, "about"); await ctx.reply("Расскажите немного о себе.", { reply_markup: force("Напишите о себе") }); return; }
+  if (ctx.session.step === "telegram_manual") { if (text === "Пропустить") { d.telegramUsername = null; begin(ctx, "telegram_final"); await ctx.reply("📱 Telegram: не указан", { reply_markup: finalTelegramKeyboard() }); return; } const username = normalizeTelegramUsername(text); if (!username) { await ctx.reply("Некорректный username. Используйте @ и от 5 до 32 латинских букв, цифр или _.", { reply_markup: force("@username") }); return; } d.telegramUsername = username; begin(ctx, "telegram_final"); await ctx.reply(`📱 Telegram: @${username}`, { reply_markup: finalTelegramKeyboard() }); return; }
   if (ctx.session.step === "report") { await next(); return; }
   await next();
 });
 
 composer.callbackQuery(/^profile:gender:(f|m|other)$/, async (ctx) => { await ctx.answerCallbackQuery(); draft(ctx).gender = ctx.match[1]; begin(ctx, "city"); await ctx.reply("В каком городе вы живёте?", { reply_markup: force("Введите город") }); });
 composer.callbackQuery(/^profile:marital:(single|relationship|divorced|widowed)$/, async (ctx) => { await ctx.answerCallbackQuery(); draft(ctx).maritalStatus = ({ single: "Не был(а) в браке", relationship: "В отношениях", divorced: "Разведён(а)", widowed: "Вдовец или вдова" } as Record<string, string>)[ctx.match[1]]; begin(ctx, "photos"); await ctx.reply("Пришлите от 1 до 6 фотографий. Можно отправлять их по одной."); });
+
+async function askTelegram(ctx: Ctx): Promise<void> {
+  const username = ctx.from?.username;
+  if (username && normalizeTelegramUsername(`@${username}`)) {
+    draft(ctx).telegramUsername = normalizeTelegramUsername(`@${username}`);
+    begin(ctx, "telegram");
+    await ctx.reply(`📱 Telegram: @${draft(ctx).telegramUsername}`, { reply_markup: telegramKeyboard() });
+    return;
+  }
+  draft(ctx).telegramUsername = null;
+  begin(ctx, "telegram_manual");
+  await ctx.reply(telegramPrompt, { reply_markup: skipKeyboard });
+}
+
+composer.callbackQuery("profile:telegram:confirm", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "telegram_final"); const value = draft(ctx).telegramUsername; await ctx.reply(value ? `📱 Telegram: @${value}` : "📱 Telegram: не указан", { reply_markup: finalTelegramKeyboard() }); });
+composer.callbackQuery("profile:telegram:change", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "telegram_manual"); await ctx.reply(telegramPrompt, { reply_markup: force("@username") }); });
+composer.callbackQuery("profile:telegram:final", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "preview"); const d = draft(ctx); if (d.photos?.[0]) await ctx.replyWithPhoto(d.photos[0], { caption: previewText(d), reply_markup: previewKeyboard() }); else await ctx.reply(previewText(d), { reply_markup: previewKeyboard() }); });
+composer.on("message:text", async (ctx, next) => { if (ctx.session.step !== "telegram_manual" || ctx.message.text.trim() !== "Пропустить") { await next(); return; } draft(ctx).telegramUsername = null; begin(ctx, "telegram_final"); await ctx.reply("📱 Telegram: не указан", { reply_markup: finalTelegramKeyboard() }); });
 
 composer.on("message:photo", async (ctx, next) => {
   if (ctx.session.step !== "photos" || !ctx.session.draft) { await next(); return; }
@@ -63,13 +87,13 @@ composer.callbackQuery("profile:create:cancel", async (ctx) => {
   else await ctx.reply(text, { reply_markup: menu });
 });
 composer.callbackQuery("profile:create:save", async (ctx) => {
-  await ctx.answerCallbackQuery(); const d = draft(ctx); const required = d.name && d.age && d.city && d.photos?.length && d.maritalStatus && d.education && d.profession && d.height && d.bio && d.purpose;
+  await ctx.answerCallbackQuery(); const d = draft(ctx); const required = d.name && d.age && d.city && d.photos?.length && d.maritalStatus && d.education && d.profession && d.height && d.bio && d.purpose && d.telegramUsername !== undefined;
   if (!required) { await ctx.reply("Профиль ещё не заполнен. Вернитесь к изменению и добавьте все поля."); return; }
-  const timestamp = now(); const telegramUsername = ctx.from?.username ?? ""; const profile: Profile = { userId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, education: d.education!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, telegramUsername, telegram_username: telegramUsername, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
+  const timestamp = now(); const telegramUsername = d.telegramUsername ?? null; const profile: Profile = { userId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, education: d.education!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, telegramUsername, telegram_username: telegramUsername, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
   const store = new DomainStore(ctx); const saved = await store.set(profileKey(profile.userId), profile); const ids = await store.get<number[]>(profileIndexKey()) ?? []; if (!ids.includes(profile.userId)) await store.set(profileIndexKey(), [...ids, profile.userId]);
   const admin = adminChatId(ctx); if (admin) { try { await ctx.api.sendMessage(admin, `Новая анкета: ${profile.name}, ${profile.age}, ${profile.city}`); } catch { /* delivery is best effort */ } }
   if (!saved) {
-    await ctx.reply("Профиль готов, но хранилище пока недоступно. Попробуйте сохранить ещё раз позже.", { reply_markup: menu });
+    await ctx.reply(d.telegramUsername ? "Ошибка: не удалось сохранить Telegram. Попробуйте ещё раз." : "Профиль готов, но хранилище пока недоступно. Попробуйте сохранить ещё раз позже.", { reply_markup: d.telegramUsername ? previewKeyboard() : menu });
     return;
   }
   ctx.session.step = "idle"; ctx.session.draft = undefined;

@@ -16,7 +16,9 @@
       { "send": { "text": "Врач" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Какой у вас рост в сантиметрах?" } }] },
       { "send": { "text": "170" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Расскажите немного о себе." } }] },
       { "send": { "text": "Люблю путешествия и спокойные вечера." }, "expect": [{ "method": "sendMessage", "payload": { "text": "Что вы ищете в отношениях?" } }] },
-      { "send": { "text": "Семью и взаимную поддержку." }, "expect": [{ "method": "sendPhoto" }] },
+      { "send": { "text": "Семью и взаимную поддержку." }, "expect": [{ "method": "sendMessage", "payload": { "text": "Пожалуйста, укажите ваш Telegram username в формате @username" } }] },
+      { "send": { "text": "Пропустить" }, "expect": [{ "method": "sendMessage", "payload": { "text": "📱 Telegram: не указан" } }] },
+      { "send": { "callback": "profile:telegram:final" }, "expect": [{ "method": "sendPhoto" }] },
       { "send": { "callback": "profile:create:save" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Профиль готов, но хранилище пока недоступно. Попробуйте сохранить ещё раз позже." } }] }
     ]
   }
