@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, matchesKey, messagesKey, normalizeTelegramUsername, now, profileIndexKey, profileKey, searchFiltersKey, userId, profileSummary, validTelegramUsername, withTelegramDefaults, type Profile } from "../domain.js";
+import { DomainStore, matchesKey, messagesKey, normalizeTelegramUsername, now, profileIndexKey, profileKey, searchFiltersKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, profileSummary, validTelegramUsername, withTelegramDefaults, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit } from "../content-policy.js";
 
@@ -45,6 +45,24 @@ async function saveTelegramEdit(ctx: Ctx): Promise<void> {
   const value = ctx.session.draft?.telegramUsername ?? null;
   const store = new DomainStore(ctx); const stored = await store.get<Profile>(profileKey(userId(ctx)));
   if (!stored) { await ctx.reply("Профиль не найден."); return; }
+  const previousValue = withTelegramDefaults(stored).telegramUsername;
+  if (value) {
+    const ownerKey = telegramUsernameOwnerKey(value);
+    const owner = await store.get<number>(ownerKey);
+    if (owner !== undefined && owner !== userId(ctx)) {
+      console.info("telegram username conflict", { username: value.toLowerCase(), owner, attemptedBy: userId(ctx) });
+      await ctx.reply("Этот username уже используется. Укажите другой username.", { reply_markup: inlineKeyboard([[inlineButton("Изменить username", "profile:edit:telegram:change")]]) });
+      return;
+    }
+    const ownerSaved = owner === userId(ctx) || await store.setIfAbsent(ownerKey, userId(ctx));
+    if (!ownerSaved) { await ctx.reply("Не удалось сохранить username. Попробуйте ещё раз."); return; }
+    if (!(await store.set(telegramUsernameKey(userId(ctx)), value))) { await ctx.reply("Не удалось сохранить username. Попробуйте ещё раз."); return; }
+    console.info("telegram username saved", { userId: userId(ctx), username: value.toLowerCase() });
+  }
+  if (previousValue && previousValue.toLowerCase() !== value?.toLowerCase()) {
+    const previousOwnerKey = telegramUsernameOwnerKey(previousValue);
+    if (await store.get<number>(previousOwnerKey) === userId(ctx)) await store.delete(previousOwnerKey);
+  }
   const p = withTelegramDefaults(stored); p.telegramUsername = value; p.telegram_username = value; p.updatedAt = now();
   try { if (!(await store.set(profileKey(p.userId), p))) throw new Error("storage"); } catch { await ctx.reply("Ошибка: не удалось сохранить Telegram. Попробуйте ещё раз."); return; }
   ctx.session.step = "idle"; ctx.session.editField = undefined; ctx.session.draft = undefined;

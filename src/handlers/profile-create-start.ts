@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, normalizeTelegramUsername, now, profileIndexKey, profileKey, userId, type Profile } from "../domain.js";
+import { DomainStore, normalizeTelegramUsername, now, profileIndexKey, profileKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { activeRegistrationBlock, blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit, registrationState } from "../content-policy.js";
 
@@ -24,8 +24,6 @@ function previewKeyboard(): ReturnType<typeof inlineKeyboard> {
 }
 function begin(ctx: Ctx, step: Ctx["session"]["step"]): void { ctx.session.step = step; ctx.session.expiresAt = now() + 15 * 60_000; }
 const telegramPrompt = "Пожалуйста, укажите ваш Telegram username в формате @username";
-const telegramKeyboard = () => choose([[inlineButton("Подтвердить", "profile:telegram:confirm"), inlineButton("Изменить", "profile:telegram:change")]]);
-const finalTelegramKeyboard = () => choose([[inlineButton("Подтвердить", "profile:telegram:final"), inlineButton("Изменить", "profile:telegram:change")]]);
 const skipKeyboard = { keyboard: [[{ text: "Пропустить" }]], resize_keyboard: true, one_time_keyboard: true };
 
 // Callback data is user-controlled. Do not rely on the visible button order
@@ -64,7 +62,19 @@ composer.on("message:text", async (ctx, next) => {
   if (ctx.session.step === "nationality" || ctx.session.step === "nationality_manual") { if (text.length < 1 || text.length > 100) { await ctx.reply("Укажите национальность не длиннее 100 символов.", { reply_markup: force("Введите национальность") }); return; } d.nationality = text; begin(ctx, "profession"); await ctx.reply("Чем вы занимаетесь?", { reply_markup: force("Напишите профессию") }); return; }
   if (["profession", "about", "purpose"].includes(ctx.session.step ?? "")) { if (text.length < 2 || text.length > 500) { await ctx.reply("Ответ должен быть от 2 до 500 символов. Попробуйте ещё раз.", { reply_markup: force("Введите ответ") }); return; } const step = ctx.session.step; if (step === "profession") d.profession = text; if (step === "about") d.bio = text; if (step === "purpose") d.purpose = text; const nextStep = step === "profession" ? "height" : step === "about" ? "purpose" : "telegram"; begin(ctx, nextStep); if (nextStep === "height") await ctx.reply("Какой у вас рост в сантиметрах?", { reply_markup: force("Например, 170") }); else if (nextStep === "purpose") await ctx.reply("Что вы ищете в отношениях?", { reply_markup: force("Напишите коротко о цели") }); else await askTelegram(ctx); return; }
   if (ctx.session.step === "height") { const height = Number(text); if (!Number.isInteger(height) || height < 120 || height > 230) { await ctx.reply("Укажите рост от 120 до 230 сантиметров.", { reply_markup: force("Например, 170") }); return; } d.height = height; begin(ctx, "about"); await ctx.reply("Расскажите немного о себе.", { reply_markup: force("Напишите о себе") }); return; }
-  if (ctx.session.step === "telegram_manual") { if (text === "Пропустить") { d.telegramUsername = null; begin(ctx, "telegram_final"); await ctx.reply("📱 Telegram: не указан", { reply_markup: finalTelegramKeyboard() }); return; } const username = normalizeTelegramUsername(text); if (!username) { await ctx.reply("Некорректный username. Используйте @ и от 5 до 32 латинских букв, цифр или _.", { reply_markup: force("@username") }); return; } d.telegramUsername = username; begin(ctx, "telegram_final"); await ctx.reply(`📱 Telegram: @${username}`, { reply_markup: finalTelegramKeyboard() }); return; }
+  if (ctx.session.step === "telegram_manual") {
+    if (text === "Пропустить") { d.telegramUsername = null; await showPreview(ctx); return; }
+    const username = normalizeTelegramUsername(text);
+    if (!username) { await ctx.reply("Некорректный username. Используйте @ и от 5 до 32 латинских букв, цифр или _.", { reply_markup: force("@username") }); return; }
+    const result = await reserveUsername(ctx, username);
+    if (result === "conflict") { await ctx.reply("Этот username уже используется. Укажите другой username в формате @username.", { reply_markup: force("@username") }); return; }
+    // Continue to preview when storage is temporarily unavailable; the final
+    // publish step will report that it could not persist the profile.
+    d.telegramUsername = username;
+    d.usernameConfirmed = true;
+    await showPreview(ctx);
+    return;
+  }
   if (ctx.session.step === "report") { await next(); return; }
   await next();
 });
@@ -92,11 +102,19 @@ composer.callbackQuery("profile:nationality:other", async (ctx) => { await ctx.a
 composer.callbackQuery("profile:nationality:manual", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "nationality_manual"); await ctx.reply("Напишите вашу национальность — до 100 символов.", { reply_markup: force("Введите национальность") }); });
 
 async function askTelegram(ctx: Ctx): Promise<void> {
+  const store = new DomainStore(ctx);
+  const savedUsername = await store.get<string | null>(telegramUsernameKey(userId(ctx)));
+  if (savedUsername) {
+    draft(ctx).telegramUsername = savedUsername;
+    draft(ctx).usernameConfirmed = true;
+    await showPreview(ctx);
+    return;
+  }
   const username = ctx.from?.username;
   if (username && normalizeTelegramUsername(`@${username}`)) {
     draft(ctx).telegramUsername = normalizeTelegramUsername(`@${username}`);
     begin(ctx, "telegram");
-    await ctx.reply(`📱 Telegram: @${draft(ctx).telegramUsername}`, { reply_markup: telegramKeyboard() });
+    await ctx.reply(`📱 Telegram: @${draft(ctx).telegramUsername}`, { reply_markup: choose([[inlineButton("Подтвердить", "profile:telegram:confirm"), inlineButton("Изменить", "profile:telegram:change")]]) });
     return;
   }
   draft(ctx).telegramUsername = null;
@@ -104,10 +122,41 @@ async function askTelegram(ctx: Ctx): Promise<void> {
   await ctx.reply(telegramPrompt, { reply_markup: skipKeyboard });
 }
 
-composer.callbackQuery("profile:telegram:confirm", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "telegram_final"); const value = draft(ctx).telegramUsername; await ctx.reply(value ? `📱 Telegram: @${value}` : "📱 Telegram: не указан", { reply_markup: finalTelegramKeyboard() }); });
+async function reserveUsername(ctx: Ctx, value: string): Promise<"saved" | "conflict" | "unavailable"> {
+  const id = userId(ctx);
+  const store = new DomainStore(ctx);
+  const ownerKey = telegramUsernameOwnerKey(value);
+  const owner = await store.get<number>(ownerKey);
+  if (owner !== undefined && owner !== id) {
+    console.info("telegram username conflict", { username: value.toLowerCase(), owner, attemptedBy: id });
+    return "conflict";
+  }
+  const ownerSaved = owner === id || await store.setIfAbsent(ownerKey, id);
+  if (!ownerSaved) return "unavailable";
+  const userSaved = await store.set(telegramUsernameKey(id), value);
+  if (!userSaved) return "unavailable";
+  console.info("telegram username saved", { userId: id, username: value.toLowerCase() });
+  return "saved";
+}
+
+async function showPreview(ctx: Ctx): Promise<void> {
+  begin(ctx, "preview");
+  const d = draft(ctx);
+  if (d.photos?.[0]) await ctx.replyWithPhoto(d.photos[0], { caption: previewText(d), reply_markup: previewKeyboard() });
+  else await ctx.reply(previewText(d), { reply_markup: previewKeyboard() });
+}
+
+composer.callbackQuery("profile:telegram:confirm", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const value = draft(ctx).telegramUsername;
+  if (!value) { await ctx.reply(telegramPrompt, { reply_markup: force("@username") }); return; }
+  const result = await reserveUsername(ctx, value);
+  if (result === "conflict") { begin(ctx, "telegram_manual"); await ctx.reply("Этот username уже используется. Укажите другой username в формате @username.", { reply_markup: force("@username") }); return; }
+  // The final publish step remains the durable checkpoint during an outage.
+  draft(ctx).usernameConfirmed = true;
+  await showPreview(ctx);
+});
 composer.callbackQuery("profile:telegram:change", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "telegram_manual"); await ctx.reply(telegramPrompt, { reply_markup: force("@username") }); });
-composer.callbackQuery("profile:telegram:final", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "preview"); const d = draft(ctx); if (d.photos?.[0]) await ctx.replyWithPhoto(d.photos[0], { caption: previewText(d), reply_markup: previewKeyboard() }); else await ctx.reply(previewText(d), { reply_markup: previewKeyboard() }); });
-composer.on("message:text", async (ctx, next) => { if (ctx.session.step !== "telegram_manual" || ctx.message.text.trim() !== "Пропустить") { await next(); return; } draft(ctx).telegramUsername = null; begin(ctx, "telegram_final"); await ctx.reply("📱 Telegram: не указан", { reply_markup: finalTelegramKeyboard() }); });
 
 composer.on("message:photo", async (ctx, next) => {
   if (ctx.session.step !== "photos" || !ctx.session.draft) { await next(); return; }

@@ -188,6 +188,11 @@ export class DomainStore {
 
 export function userId(ctx: { from?: { id: number } }): number { return ctx.from?.id ?? 0; }
 export function profileKey(id: number): string { return `profile:${id}`; }
+/** Durable username records let registration reserve a name before publishing. */
+export function telegramUsernameKey(id: number): string { return `telegram-username:${id}`; }
+export function telegramUsernameOwnerKey(username: string): string {
+  return `telegram-username-owner:${username.toLowerCase()}`;
+}
 export function searchFiltersKey(id: number): string { return `search-filters:${id}`; }
 export function likesKey(id: number): string { return `likes:${id}`; }
 export function likeKey(from: number, to: number): string { return `like:${from}:${to}`; }
