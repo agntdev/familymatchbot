@@ -26,6 +26,19 @@ export interface Profile {
   updatedAt: number;
 }
 
+export type SearchGender = "m" | "f" | "other" | "any";
+export type SearchRelationshipStatus = "single" | "relationship" | "divorced" | "widowed" | "any";
+
+/** Persistent discovery preferences. Undefined age/city means any value. */
+export interface SearchFilters {
+  gender: SearchGender;
+  ageFrom?: number;
+  ageTo?: number;
+  city?: string;
+  relationshipStatus: SearchRelationshipStatus;
+  updatedAt: number;
+}
+
 /** A durable like. The long names mirror the domain contract; the short aliases
  * are retained when reading profiles created by the first scaffold revision. */
 export interface Like {
@@ -157,6 +170,7 @@ export class DomainStore {
 
 export function userId(ctx: { from?: { id: number } }): number { return ctx.from?.id ?? 0; }
 export function profileKey(id: number): string { return `profile:${id}`; }
+export function searchFiltersKey(id: number): string { return `search-filters:${id}`; }
 export function likesKey(id: number): string { return `likes:${id}`; }
 export function likeKey(from: number, to: number): string { return `like:${from}:${to}`; }
 export function likeIndexKey(from: number): string { return `likes:index:${from}`; }

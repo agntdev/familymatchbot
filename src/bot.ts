@@ -6,7 +6,7 @@ import type { StorageAdapter } from "grammy";
 // bot grows. Durable domain data must NOT live here — use the toolkit's
 // persistent storage (see AGENTS.md).
 export interface Session {
-  step?: "idle" | "consent" | "name" | "age" | "gender" | "city" | "photos" | "marital" | "education" | "profession" | "height" | "about" | "purpose" | "preview" | "message" | "report" | "edit_field" | "edit_bio";
+  step?: "idle" | "consent" | "name" | "age" | "gender" | "city" | "photos" | "marital" | "education" | "profession" | "height" | "about" | "purpose" | "preview" | "message" | "report" | "edit_field" | "edit_bio" | "search_age_from" | "search_age_to" | "search_city";
   draft?: { name?: string; age?: number; city?: string; photos?: string[]; gender?: string; maritalStatus?: string; education?: string; profession?: string; height?: number; bio?: string; purpose?: string; preferredAgeFrom?: number; preferredAgeTo?: number; preferredGender?: string };
   activeMatchId?: string;
   activeTargetId?: number;
@@ -14,6 +14,7 @@ export interface Session {
   reportReason?: string;
   expiresAt?: number;
   editField?: string;
+  searchDraft?: { gender?: "m" | "f" | "other" | "any"; ageFrom?: number; ageTo?: number; city?: string; relationshipStatus?: "single" | "relationship" | "divorced" | "widowed" | "any" };
 }
 
 export type Ctx = BotContext<Session>;
