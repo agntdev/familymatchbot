@@ -1,0 +1,39 @@
+[
+  {
+    "name": "Telegram sharing stays private without a mutual match",
+    "steps": [
+      {
+        "send": { "callback": "likes:telegram:42" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Telegram доступен только после взаимной симпатии." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Settings exposes Telegram sharing control",
+    "steps": [
+      {
+        "send": { "callback": "settings:open" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Настройте видимость профиля и удалите данные, когда захотите." }
+          }
+        ]
+      },
+      {
+        "send": { "callback": "settings:telegram:toggle" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Сначала создайте профиль." }
+          }
+        ]
+      }
+    ]
+  }
+]

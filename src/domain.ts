@@ -20,6 +20,11 @@ export interface Profile {
   preferredAgeFrom?: number;
   preferredAgeTo?: number;
   preferredGender?: string;
+  /** Optional contact sharing, disabled unless the user explicitly opts in. */
+  telegramUsername: string;
+  showTelegramOnMatch: boolean;
+  telegram_username?: string;
+  show_telegram_on_match?: boolean;
   blockedUserIds?: number[];
   visibility: boolean;
   vip?: boolean;
@@ -198,6 +203,19 @@ export function canonicalMatchId(a: number, b: number): string {
   return `${pair[0]}-${pair[1]}`;
 }
 export function eventsKey(): string { return "events:index"; }
+
+/** Existing profiles may predate the Telegram privacy fields. */
+export function withTelegramDefaults(profile: Profile): Profile {
+  return {
+    ...profile,
+    telegramUsername: profile.telegramUsername || profile.telegram_username || "",
+    showTelegramOnMatch: profile.showTelegramOnMatch === true || profile.show_telegram_on_match === true,
+  };
+}
+
+export function validTelegramUsername(value: string): boolean {
+  return /^[A-Za-z0-9_]{5,32}$/.test(value);
+}
 
 export function likeFrom(value: Like): number { return value.from_user_id ?? value.from ?? 0; }
 export function likeTo(value: Like): number { return value.to_user_id ?? value.to ?? 0; }
