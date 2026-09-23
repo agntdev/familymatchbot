@@ -1,0 +1,23 @@
+[
+  {
+    "name": "profile wizard collects the requested fields and previews the primary photo",
+    "steps": [
+      { "send": { "callback": "profile:create:start" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Серьёзные отношения начинаются с уважения. Вы ищете партнёра для серьёзных отношений и семьи?" } }] },
+      { "send": { "callback": "profile:consent:yes" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Как вас зовут?" } }] },
+      { "send": { "text": "Анна" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Сколько вам лет? Нужен возраст от 18 до 99 лет." } }] },
+      { "send": { "text": " thirty" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Укажите целый возраст от 18 до 99 лет." } }] },
+      { "send": { "text": "30" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Как вы себя определяете?" } }] },
+      { "send": { "callback": "profile:gender:f" }, "expect": [{ "method": "sendMessage", "payload": { "text": "В каком городе вы живёте?" } }] },
+      { "send": { "text": "Москва" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Каков ваш семейный статус?" } }] },
+      { "send": { "callback": "profile:marital:single" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Пришлите от 1 до 6 фотографий. Можно отправлять их по одной." } }] },
+      { "send": { "update": { "update_id": 100, "message": { "message_id": 100, "date": 0, "chat": { "id": 1, "type": "private", "first_name": "Test" }, "from": { "id": 1, "is_bot": false, "first_name": "Test" }, "photo": [{ "file_id": "photo-1", "file_unique_id": "unique-1", "width": 100, "height": 100 }] } } }, "expect": [{ "method": "sendMessage", "payload": { "text": "Фото добавлено: 1/6." } }] },
+      { "send": { "callback": "profile:photos:done" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Какое у вас образование?" } }] },
+      { "send": { "text": "Высшее" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Чем вы занимаетесь?" } }] },
+      { "send": { "text": "Врач" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Какой у вас рост в сантиметрах?" } }] },
+      { "send": { "text": "170" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Расскажите немного о себе." } }] },
+      { "send": { "text": "Люблю путешествия и спокойные вечера." }, "expect": [{ "method": "sendMessage", "payload": { "text": "Что вы ищете в отношениях?" } }] },
+      { "send": { "text": "Семью и взаимную поддержку." }, "expect": [{ "method": "sendPhoto" }] },
+      { "send": { "callback": "profile:create:save" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Профиль готов, но хранилище пока недоступно. Попробуйте сохранить ещё раз позже." } }] }
+    ]
+  }
+]

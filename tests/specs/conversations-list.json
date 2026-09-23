@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "List active conversations available only with mutual matches"
+              "text": "Здесь появятся разговоры после взаимной симпатии."
             }
           }
         ],

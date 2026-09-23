@@ -8,7 +8,6 @@ const composer = new Composer<Ctx>();
 composer.callbackQuery("likes:list", async (ctx) => {
   await ctx.answerCallbackQuery();
   const store = new DomainStore(ctx);
-  if (!await store.available()) { await ctx.reply("See people who liked you; accept to create a match or ignore"); return; }
   const ids = await store.get<number[]>("profiles:index") ?? [];
   for (const id of ids) {
     if (id === userId(ctx)) continue;

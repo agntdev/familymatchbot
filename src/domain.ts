@@ -8,6 +8,11 @@ export interface Profile {
   city: string;
   photos: string[];
   bio: string;
+  maritalStatus: string;
+  education: string;
+  profession: string;
+  height: number;
+  purpose: string;
   relationshipIntent: "serious";
   preferredAgeFrom?: number;
   preferredAgeTo?: number;
@@ -100,5 +105,10 @@ export function likesKey(id: number): string { return `likes:${id}`; }
 export function matchesKey(id: number): string { return `matches:${id}`; }
 export function messagesKey(id: string): string { return `messages:${id}`; }
 export function profileSummary(p: Profile): string {
-  return `${p.name}, ${p.age} — ${p.city}\n\n${p.bio}`;
+  const photoLine = p.photos.length > 1 ? `\n📷 Фото: ${p.photos.length}` : "";
+  return `💛 ${p.name}, ${p.age}\n📍 ${p.city}\n💍 ${p.maritalStatus}\n🎓 ${p.education}\n💼 ${p.profession}\n📏 ${p.height} см${photoLine}\n\nО себе: ${p.bio}\n\nЦель знакомства: ${p.purpose}`;
 }
+
+export function profileIndexKey(): string { return "profiles:index"; }
+export function reportKey(id: string): string { return `report:${id}`; }
+export function matchKey(id: string): string { return `match:${id}`; }
