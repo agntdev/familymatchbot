@@ -24,7 +24,7 @@ function pageButtons(prefix: string, page: number, more: boolean) {
 function panelKeyboard() {
   return inlineKeyboard([
     [inlineButton("Пользователи", "admin:users:0"), inlineButton("Новые", "admin:new:0")],
-    [inlineButton("Активные", "admin:active:0"), inlineButton("VIP", "admin:vips:0")],
+    [inlineButton("Активные", "admin:active:0"), inlineButton("Особые возможности", "admin:vips:0")],
     [inlineButton("Лайки", "admin:likes:0"), inlineButton("Матчи", "admin:matches:0")],
     [inlineButton("Сообщения", "admin:messages:0"), inlineButton("Жалобы", "admin:complaints:0")],
     [inlineButton("Найти пользователя", "admin:user:search")],
@@ -96,11 +96,11 @@ composer.command("admin", async (ctx) => {
   const matchIds = new Set<string>(); for (const p of list) for (const id of await store.get<string[]>(matchesKey(p.userId)) ?? []) matchIds.add(id);
   for (const id of matchIds) messages += (await store.get<Message[]>(messagesKey(id)) ?? []).length;
   const recent = list.filter((p) => p.createdAt >= cutoffDay).length; const active = list.filter((p) => p.updatedAt >= cutoffMonth).length; const vip = list.filter((p) => p.vip).length;
-  await ctx.reply(`Панель владельца\n\nВсего пользователей: ${list.length}\nНовые за 24 часа: ${recent}\nАктивные за 30 дней: ${active}\nВсего лайков: ${likes}\nВзаимных матчей: ${matches}\nСообщений: ${messages}\nVIP-пользователей: ${vip}`, { reply_markup: panelKeyboard() });
+  await ctx.reply(`Панель владельца\n\nВсего пользователей: ${list.length}\nНовые за 24 часа: ${recent}\nАктивные за 30 дней: ${active}\nВсего лайков: ${likes}\nВзаимных матчей: ${matches}\nСообщений: ${messages}\nПользователей с особыми возможностями: ${vip}`, { reply_markup: panelKeyboard() });
 });
 composer.callbackQuery("admin:open", async (ctx) => { if (!owner(ctx)) return; await ctx.answerCallbackQuery(); await ctx.reply("Откройте нужный раздел панели.", { reply_markup: panelKeyboard() }); });
 composer.callbackQuery(/^admin:(users|new|active|vips):(\d+)$/, async (ctx) => {
-  if (!owner(ctx)) return; await ctx.answerCallbackQuery(); const store = new DomainStore(ctx); const list = await profiles(store); const kind = ctx.match[1]; const cutoff = now() - (kind === "new" ? DAY : MONTH); const filtered = kind === "new" ? list.filter((p) => p.createdAt >= cutoff) : kind === "active" ? list.filter((p) => p.updatedAt >= cutoff) : kind === "vips" ? list.filter((p) => p.vip) : list; await pageProfiles(ctx, kind === "users" ? "Все пользователи" : kind === "new" ? "Новые регистрации" : kind === "active" ? "Активные профили" : "VIP-пользователи", filtered, Number(ctx.match[2]), `admin:${kind}`);
+  if (!owner(ctx)) return; await ctx.answerCallbackQuery(); const store = new DomainStore(ctx); const list = await profiles(store); const kind = ctx.match[1]; const cutoff = now() - (kind === "new" ? DAY : MONTH); const filtered = kind === "new" ? list.filter((p) => p.createdAt >= cutoff) : kind === "active" ? list.filter((p) => p.updatedAt >= cutoff) : kind === "vips" ? list.filter((p) => p.vip) : list; await pageProfiles(ctx, kind === "users" ? "Все пользователи" : kind === "new" ? "Новые регистрации" : kind === "active" ? "Активные профили" : "Пользователи с особыми возможностями", filtered, Number(ctx.match[2]), `admin:${kind}`);
 });
 composer.callbackQuery(/^admin:(likes|matches|messages):(\d+)$/, async (ctx) => {
   if (!owner(ctx)) return; await ctx.answerCallbackQuery(); const store = new DomainStore(ctx); const list = await profiles(store); const kind = ctx.match[1]; const ids = new Set<number>();

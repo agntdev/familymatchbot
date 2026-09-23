@@ -9,10 +9,10 @@ import { inlineButton, inlineKeyboard } from "../toolkit/index.js";
 const composer = new Composer<Ctx>();
 
 const HELP =
-  "ℹ️ Tap /start to open the menu, then pick what you want from the buttons.\n\n" +
-  "Everything in this bot is reachable by tapping — you don't need to remember any commands.";
+  "ℹ️ «Никах» помогает взрослым людям встретить близкого человека для серьёзных отношений и семьи. Откройте /start и выберите нужный раздел кнопкой.\n\n" +
+  "Создайте анкету, настройте поиск, знакомьтесь с подходящими людьми и пишите только взаимным симпатиям. Берегите личные границы и сообщайте о том, что кажется небезопасным.";
 
-const backToMenu = inlineKeyboard([[inlineButton("⬅️ Back to menu", "menu:main")]]);
+const backToMenu = inlineKeyboard([[inlineButton("⬅️ В меню", "menu:main")]]);
 
 composer.command("help", async (ctx) => {
   ctx.session.step = "idle";

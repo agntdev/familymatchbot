@@ -12,27 +12,27 @@
       },
       {
         "send": { "text": "/likes" },
-        "expect": [{ "method": "sendMessage", "payload": { "text": "Проверяю ваши симпатии." } }]
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Посмотрим, кому вы понравились." } }]
       },
       {
         "send": { "text": "/matches" },
-        "expect": [{ "method": "sendMessage", "payload": { "text": "Пока взаимных симпатий нет — знакомьтесь, и всё обязательно начнётся с доброго шага." } }]
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Пока взаимных симпатий нет — знакомьтесь без спешки, и всё может начаться с доброго шага." } }]
       },
       {
         "send": { "text": "/messages" },
-        "expect": [{ "method": "sendMessage", "payload": { "text": "Открываю ваши разговоры." } }]
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Здесь хранятся ваши разговоры с взаимными симпатиями." } }]
       },
       {
         "send": { "text": "/filters" },
-        "expect": [{ "method": "sendMessage", "payload": { "text": "Открываю фильтры поиска." } }]
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Настройте поиск человека, с которым вам будет близко строить семью." } }]
       },
       {
         "send": { "text": "/vip" },
-        "expect": [{ "method": "sendMessage", "payload": { "text": "VIP пока готовится. Мы сообщим, когда станут доступны дополнительные возможности." } }]
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Дополнительные возможности для серьёзных знакомств пока готовятся. Мы сообщим, когда они станут доступны." } }]
       },
       {
         "send": { "text": "/settings" },
-        "expect": [{ "method": "sendMessage", "payload": { "text": "Настройки профиля и безопасности доступны здесь." } }]
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Здесь можно позаботиться о видимости анкеты и безопасности." } }]
       }
     ]
   },
@@ -49,11 +49,11 @@
       },
       {
         "send": { "text": "/settings" },
-        "expect": [{ "method": "sendMessage", "payload": { "text": "Настройки профиля и безопасности доступны здесь." } }]
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Здесь можно позаботиться о видимости анкеты и безопасности." } }]
       },
       {
         "send": { "text": "Это не имя" },
-        "expect": [{ "method": "sendMessage", "payload": { "text": "Sorry, I didn't understand that. Try /help." } }]
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Я не совсем понял(а) сообщение. Откройте /start и выберите нужную кнопку." } }]
       }
     ]
   }
