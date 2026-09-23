@@ -35,7 +35,7 @@ export interface DONamespace {
 export interface DOStub {
   fetch(input: string, init?: { method?: string; body?: string }): Promise<Response>;
 }
-export interface WorkerEnv {
+export interface WorkerEnv extends Record<string, unknown> {
   BOT_TOKEN: string;
   WEBHOOK_SECRET?: string;
   CHAT_DO: DONamespace;

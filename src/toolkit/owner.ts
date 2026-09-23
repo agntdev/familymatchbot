@@ -69,25 +69,21 @@ function nodeProcessEnv(): Record<string, unknown> | undefined {
  * Platform-injected owner/admin chat id, or `undefined` if unset.
  * Prefer `ctx.env` (Workers); fall back to `process.env` only for Node/harness.
  */
-export function adminChatId(ctx: {
-  env?: Record<string, unknown> | null;
-}): string | undefined {
+export function adminChatId(ctx: unknown): string | undefined {
+  const value = ctx as { env?: Record<string, unknown> | null };
   return (
-    readAdminFromEnv(ctx.env ?? undefined) ?? readAdminFromEnv(nodeProcessEnv())
+    readAdminFromEnv(value.env ?? undefined) ?? readAdminFromEnv(nodeProcessEnv())
   );
 }
 
 /** True when the update's user (or private chat) matches the injected owner id. */
-export function isOwner(ctx: {
-  env?: Record<string, unknown> | null;
-  from?: { id: number } | undefined;
-  chat?: { id: number } | undefined;
-}): boolean {
-  const admin = adminChatId(ctx);
+export function isOwner(ctx: unknown): boolean {
+  const value = ctx as { env?: Record<string, unknown> | null; from?: { id: number }; chat?: { id: number } };
+  const admin = adminChatId(value);
   if (admin === undefined) return false;
-  if (ctx.from?.id !== undefined && String(ctx.from.id) === admin) return true;
+  if (value.from?.id !== undefined && String(value.from.id) === admin) return true;
   // Private chats: chat id equals user id — notify targets often use chat id.
-  if (ctx.chat?.id !== undefined && String(ctx.chat.id) === admin) return true;
+  if (value.chat?.id !== undefined && String(value.chat.id) === admin) return true;
   return false;
 }
 
