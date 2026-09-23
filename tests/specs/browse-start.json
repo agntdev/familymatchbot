@@ -27,6 +27,19 @@
         "send": {
           "callback": "browse:view:42"
         }
+      },
+      {
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": {
+              "text": "Эта анкета больше недоступна."
+            }
+          }
+        ],
+        "send": {
+          "callback": "browse:like:42"
+        }
       }
     ]
   }
