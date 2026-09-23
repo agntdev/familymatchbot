@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Browse profiles",
+    "steps": [
+      {
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": {
+              "text": "Open the discovery queue (one profile card at a time)"
+            }
+          }
+        ],
+        "send": {
+          "callback": "browse:start"
+        }
+      }
+    ]
+  }
+]
