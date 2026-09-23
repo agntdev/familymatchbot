@@ -3,7 +3,15 @@ import type { Ctx } from "../bot.js";
 import {
   DomainStore,
   eventsKey,
+  canonicalMatchId,
+  likeTo,
   likesKey,
+  likeIndexKey,
+  likeKey,
+  makeLike,
+  makeMatch,
+  matchA,
+  matchB,
   matchesKey,
   matchKey,
   now,
@@ -75,7 +83,7 @@ async function excluded(store: DomainStore, viewer: number, candidate: number): 
   const viewerProfile = await store.get<Profile>(profileKey(viewer));
   if (viewerProfile?.blockedUserIds?.includes(candidate)) return true;
   const ownLikes = await store.get<Like[]>(likesKey(viewer)) ?? [];
-  if (ownLikes.some((like) => like.to === candidate)) return true;
+  if (ownLikes.some((like) => likeTo(like) === candidate && like.status !== "ignored")) return true;
   const skipped = await store.get<number[]>(skipsKey(viewer)) ?? [];
   if (skipped.includes(candidate)) return true;
   const theirSkips = await store.get<number[]>(skipsKey(candidate)) ?? [];
@@ -83,7 +91,7 @@ async function excluded(store: DomainStore, viewer: number, candidate: number): 
   const matchIds = await store.get<string[]>(matchesKey(viewer)) ?? [];
   for (const id of matchIds) {
     const match = await store.get<Match>(matchKey(id));
-    if (match?.active && ((match.a === viewer && match.b === candidate) || (match.a === candidate && match.b === viewer))) return true;
+    if (match?.active && ((matchA(match) === viewer && matchB(match) === candidate) || (matchA(match) === candidate && matchB(match) === viewer))) return true;
   }
   const candidateProfile = await store.get<Profile>(profileKey(candidate));
   return candidateProfile?.blockedUserIds?.includes(viewer) === true;
@@ -123,21 +131,42 @@ async function ensureTarget(ctx: Ctx, target: number): Promise<Profile | undefin
 async function createMatch(ctx: Ctx, target: number): Promise<Match | undefined> {
   const store = new DomainStore(ctx);
   const me = userId(ctx);
+  if (me === target) return undefined;
+  const mine = await store.get<Profile>(profileKey(me));
+  const theirs = await store.get<Profile>(profileKey(target));
+  if (!mine || !theirs || !mine.visibility || !theirs.visibility) return undefined;
+  if (mine.blockedUserIds?.includes(target) || theirs.blockedUserIds?.includes(me)) return undefined;
   const theirLikes = await store.get<Like[]>(likesKey(target)) ?? [];
-  if (!theirLikes.some((like) => like.to === me && like.status !== "ignored")) return undefined;
+  if (!theirLikes.some((like) => likeTo(like) === me && like.status !== "ignored")) return undefined;
   const ownLikes = await store.get<Like[]>(likesKey(me)) ?? [];
-  for (const like of ownLikes) if (like.to === target) like.status = "matched";
-  for (const like of theirLikes) if (like.to === me) like.status = "matched";
+  for (const like of ownLikes) if (likeTo(like) === target) like.status = "matched";
+  for (const like of theirLikes) if (likeTo(like) === me) like.status = "matched";
   await store.set(likesKey(me), ownLikes);
   await store.set(likesKey(target), theirLikes);
-  const pair = [me, target].sort((a, b) => a - b);
-  const match: Match = { id: `${pair[0]}-${pair[1]}`, a: pair[0], b: pair[1], active: true, at: now() };
-  await store.set(matchKey(match.id), match);
+  const id = canonicalMatchId(me, target);
+  const existing = await store.get<Match>(matchKey(id));
+  if (existing?.active) return undefined;
+  const match = makeMatch(me, target, now());
+  if (!(await store.setIfAbsent(matchKey(match.match_id), match))) return undefined;
+  const pair = [match.user_a_id, match.user_b_id];
   for (const id of pair) {
     const matches = await store.get<string[]>(matchesKey(id)) ?? [];
-    if (!matches.includes(match.id)) await store.set(matchesKey(id), [...matches, match.id]);
+    if (!matches.includes(match.match_id)) await store.set(matchesKey(id), [...matches, match.match_id]);
   }
   return match;
+}
+
+function matchText(profile: Profile): string {
+  return `Взаимная симпатия 💛\n${profile.name}, ${profile.age}\n📍 ${profile.city}\n\nМожно начать спокойный разговор.`;
+}
+
+async function notifyMatch(ctx: Ctx, recipient: number, matchedProfile: Profile): Promise<void> {
+  const text = matchText(matchedProfile);
+  const reply_markup = inlineKeyboard([[inlineButton("💬 Написать сообщение", `conversation:open:${canonicalMatchId(userId(ctx), recipient)}`)]]);
+  try {
+    if (matchedProfile.photos[0]) await ctx.api.sendPhoto(recipient, matchedProfile.photos[0], { caption: text, reply_markup });
+    else await ctx.api.sendMessage(recipient, text, { reply_markup });
+  } catch { /* A blocked or deleted account must not break the match. */ }
 }
 
 composer.callbackQuery("browse:start", async (ctx) => { await ctx.answerCallbackQuery(); await nextProfile(ctx); });
@@ -158,16 +187,22 @@ composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
     return;
   }
   const ownLikes = await store.get<Like[]>(likesKey(me)) ?? [];
-  if (!ownLikes.some((like) => like.to === target)) {
-    ownLikes.push({ from: me, to: target, status: "pending", at: now() });
-    await store.set(likesKey(me), ownLikes);
+  if (!ownLikes.some((like) => likeTo(like) === target)) {
+    const newLike = makeLike(me, target, now());
+    const inserted = await store.setIfAbsent(likeKey(me, target), newLike);
+    if (inserted || !(await store.available())) {
+      ownLikes.push(newLike);
+      await store.set(likesKey(me), ownLikes);
+    }
+    const index = await store.get<number[]>(likeIndexKey(me)) ?? [];
+    if (!index.includes(target)) await store.set(likeIndexKey(me), [...index, target]);
   }
   await recordEvent(ctx, "like", target);
   const match = await createMatch(ctx, target);
   if (match) {
-    const message = "У вас взаимная симпатия — можно начать разговор 💬";
-    try { await ctx.api.sendMessage(target, message); } catch { /* The other person may have blocked the bot. */ }
-    await ctx.reply(message, { reply_markup: inlineKeyboard([[inlineButton("Написать", `conversation:open:${match.id}`)]]) });
+    const mine = await store.get<Profile>(profileKey(me));
+    if (mine) await notifyMatch(ctx, me, profile);
+    await notifyMatch(ctx, target, mine ?? profile);
   }
   await nextProfile(ctx);
 });
