@@ -51,8 +51,15 @@ export function createBot<S extends object>(
   // error. The same applies to harmless repeated edits of an unchanged menu.
   bot.use(async (ctx, next) => {
     const answer = ctx.answerCallbackQuery.bind(ctx);
-    ctx.answerCallbackQuery = (textOrOptions?: string | Parameters<Context["answerCallbackQuery"]>[0]) =>
-      answer(textOrOptions as never).catch(() => true as never);
+    let acknowledgement: ReturnType<Context["answerCallbackQuery"]> | undefined;
+    ctx.answerCallbackQuery = (textOrOptions?: string | Parameters<Context["answerCallbackQuery"]>[0]) => {
+      acknowledgement ??= answer(textOrOptions as never).catch(() => true as never);
+      return acknowledgement;
+    };
+    // A handler may perform several storage reads before it explicitly calls
+    // answerCallbackQuery. Acknowledge first so Telegram never expires the
+    // query while that work is in progress; later handler calls reuse it.
+    if (ctx.callbackQuery) await ctx.answerCallbackQuery();
     const edit = ctx.editMessageText.bind(ctx);
     ctx.editMessageText = (async (...args: Parameters<Context["editMessageText"]>) => {
       try {
