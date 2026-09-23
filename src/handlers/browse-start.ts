@@ -192,6 +192,11 @@ composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
   if (!profile) { await ctx.reply("Эта анкета больше недоступна.", { reply_markup: back }); return; }
   const store = new DomainStore(ctx);
   const me = userId(ctx);
+  const ownProfile = await store.get<Profile>(profileKey(me));
+  if (action === "like" && !ownProfile) {
+    await ctx.reply("Сначала создайте профиль — так людям будет проще узнать вас.", { reply_markup: inlineKeyboard([[inlineButton("Создать профиль", "profile:create:start")], [inlineButton("⬅️ В меню", "menu:main")]]) });
+    return;
+  }
   if (action === "pass") {
     const skipped = await store.get<number[]>(skipsKey(me)) ?? [];
     if (!skipped.includes(target)) await store.set(skipsKey(me), [...skipped, target]);

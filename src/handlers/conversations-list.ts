@@ -2,7 +2,7 @@ import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import {
   DomainStore, adminBlockedKey, blockKey, blocksKey, matchA, matchB, matchesKey, matchKey,
-  messagesKey, now, profileKey, reportKey, userId,
+  messagesKey, messageEventKey, now, profileKey, reportKey, userId,
   type Match, type Message, type Profile,
 } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
@@ -140,6 +140,17 @@ composer.on("message:text", async (ctx, next) => {
   if (ctx.session.lastMessageAt && stamp - ctx.session.lastMessageAt < 2_000) { await ctx.reply("Давайте не спешить — отправить следующее сообщение можно через пару секунд."); return; }
   const { store, match, other } = access;
   const key = match.match_id ?? match.id ?? id;
+  const eventKey = messageEventKey(key, ctx.update.update_id, userId(ctx));
+  if (await store.get<boolean>(eventKey)) {
+    ctx.session.step = "idle";
+    await ctx.reply("Это сообщение уже обработано.", { reply_markup: chatKeyboard(key, true) });
+    return;
+  }
+  if (await store.available() && !(await store.setIfAbsent(eventKey, true))) {
+    ctx.session.step = "idle";
+    await ctx.reply("Это сообщение уже обработано.", { reply_markup: chatKeyboard(key, true) });
+    return;
+  }
   const messages = await store.get<Message[]>(messagesKey(key)) ?? [];
   const message: Message = {
     id: `${userId(ctx)}-${stamp}`,

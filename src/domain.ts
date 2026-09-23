@@ -85,7 +85,18 @@ export interface Message {
 }
 export interface Report { id: string; reporter: number; target: number; reason: string; details?: string; snapshot: Profile; at: number }
 
-export const now = (): number => Date.now();
+let clock: () => number = () => Date.now();
+export const now = (): number => clock();
+/** Test/runtime seam for expiry and cutoff decisions. */
+export function setClock(next: () => number): () => void {
+  const previous = clock;
+  clock = next;
+  return () => { clock = previous; };
+}
+
+export function messageEventKey(matchId: string, updateId: number, sender: number): string {
+  return `message-event:${matchId}:${sender}:${updateId}`;
+}
 
 type D1 = { prepare(sql: string): { bind(...args: unknown[]): { first<T>(): Promise<T | null>; run(): Promise<{ meta?: { changes?: number }}>; all<T>(): Promise<{ results: T[] }> } } };
 type Redis = { get(key: string): Promise<string | null>; set(key: string, value: string, ...args: string[]): Promise<unknown>; del(key: string): Promise<unknown> };

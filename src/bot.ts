@@ -15,6 +15,8 @@ export interface Session {
   expiresAt?: number;
   editField?: string;
   searchDraft?: { gender?: "m" | "f" | "other" | "any"; ageFrom?: number; ageTo?: number; city?: string; relationshipStatus?: "single" | "relationship" | "divorced" | "widowed" | "any" };
+  /** Short-lived callback guard. Durable domain writes still use DomainStore. */
+  lastCallback?: { data: string; at: number };
 }
 
 export type Ctx = BotContext<Session>;

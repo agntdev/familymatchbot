@@ -68,6 +68,11 @@ composer.callbackQuery("profile:create:save", async (ctx) => {
   const timestamp = now(); const telegramUsername = ctx.from?.username ?? ""; const profile: Profile = { userId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, education: d.education!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, telegramUsername, telegram_username: telegramUsername, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
   const store = new DomainStore(ctx); const saved = await store.set(profileKey(profile.userId), profile); const ids = await store.get<number[]>(profileIndexKey()) ?? []; if (!ids.includes(profile.userId)) await store.set(profileIndexKey(), [...ids, profile.userId]);
   const admin = adminChatId(ctx); if (admin) { try { await ctx.api.sendMessage(admin, `Новая анкета: ${profile.name}, ${profile.age}, ${profile.city}`); } catch { /* delivery is best effort */ } }
-  ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.reply(saved ? "Профиль сохранён и опубликован. Желаю вам добрых знакомств." : "Профиль готов, но хранилище пока недоступно. Попробуйте сохранить ещё раз позже.", { reply_markup: menu });
+  if (!saved) {
+    await ctx.reply("Профиль готов, но хранилище пока недоступно. Попробуйте сохранить ещё раз позже.", { reply_markup: menu });
+    return;
+  }
+  ctx.session.step = "idle"; ctx.session.draft = undefined;
+  await ctx.reply("Профиль сохранён и опубликован. Желаю вам добрых знакомств.", { reply_markup: menu });
 });
 export default composer;
