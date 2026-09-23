@@ -6,7 +6,7 @@ import {
   profileIndexKey, profileKey, reportKey, reportsIndexKey, userId,
   type Like, type Match, type Message, type Profile,
 } from "../domain.js";
-import { adminChatId, inlineButton, inlineKeyboard, isOwner } from "../toolkit/index.js";
+import { adminChatId, inlineButton, inlineKeyboard, isOwner, requireOwner } from "../toolkit/index.js";
 
 const composer = new Composer<Ctx>();
 const DAY = 24 * 60 * 60 * 1000;
@@ -86,7 +86,7 @@ async function complaintList(ctx: Ctx, page: number): Promise<void> {
 }
 
 composer.command("admin", async (ctx) => {
-  if (!owner(ctx)) return;
+  if (!(await requireOwner(ctx as unknown as Parameters<typeof requireOwner>[0]))) return;
   const store = new DomainStore(ctx); const list = await profiles(store); const cutoffDay = now() - DAY; const cutoffMonth = now() - MONTH;
   let likes = 0; let matches = 0; let messages = 0;
   for (const p of list) {

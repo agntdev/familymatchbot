@@ -4,7 +4,12 @@
     "steps": [
       {
         "send": { "text": "/admin" },
-        "expect": []
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Owner access isn't set up yet." }
+          }
+        ]
       },
       {
         "send": { "callback": "admin:open" },
