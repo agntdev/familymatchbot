@@ -1,7 +1,8 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, adminBlockedKey, canonicalMatchId, eventsKey, likeTo, likesKey, makeMatch, matchesKey, matchKey, now, profileKey, userId, withTelegramDefaults, type Like, type Match, type Profile } from "../domain.js";
+import { DomainStore, adminBlockedKey, canonicalMatchId, likeTo, likesKey, makeMatch, matchesKey, matchKey, now, profileKey, userId, type Like, type Match, type Profile } from "../domain.js";
 import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
+import { contactArea, notifyMutualMatch } from "../match-ui.js";
 registerMainMenuItem({ label: "Вам понравились", data: "likes:list", order: 40 });
 const composer = new Composer<Ctx>();
 
@@ -17,7 +18,8 @@ composer.callbackQuery("likes:list", async (ctx) => {
       const target = match.user_a_id === userId(ctx) ? match.user_b_id : match.user_a_id;
       const profile = await store.get<Profile>(profileKey(target));
       if (!profile) continue;
-      await ctx.reply(`${profile.name}, ${profile.age} — ${profile.city}`, { reply_markup: inlineKeyboard([[inlineButton("📱 Telegram", `likes:telegram:${target}`)], [inlineButton("💬 Написать сообщение", `conversation:open:${matchId}`)]]) });
+      const contact = contactArea(profile, matchId);
+      await ctx.reply(`${profile.name}, ${profile.age} — ${profile.city}\n\n${contact.text}`, { reply_markup: contact.markup });
     }
     return;
   }
@@ -58,12 +60,11 @@ composer.callbackQuery(/^likes:(accept|ignore):(\d+)$/, async (ctx) => {
       if (!list.includes(match.match_id)) await store.set(matchesKey(participant), [...list, match.match_id]);
     }
   }
-  const textFor = (p: Profile) => `Взаимная симпатия 💛\n${p.name}, ${p.age}\n📍 ${p.city}\n\nМожно начать спокойный разговор.`;
-  const markup = inlineKeyboard([[inlineButton("💬 Написать сообщение", `conversation:open:${match.match_id}`)]]);
-  try { if (ownProfile.photos[0]) await ctx.api.sendPhoto(target, ownProfile.photos[0], { caption: textFor(ownProfile), reply_markup: markup }); else await ctx.api.sendMessage(target, textFor(ownProfile), { reply_markup: markup }); } catch { /* recipient may have blocked the bot */ }
   if (!existing?.active) {
-    if (ownProfile.photos[0]) await ctx.replyWithPhoto(ownProfile.photos[0], { caption: textFor(targetProfile), reply_markup: markup });
-    else await ctx.reply(textFor(targetProfile), { reply_markup: markup });
+    await notifyMutualMatch(ctx, target, ownProfile, match.match_id);
+    const message = contactArea(targetProfile, match.match_id);
+    if (targetProfile.photos[0]) await ctx.replyWithPhoto(targetProfile.photos[0], { caption: `💕 У вас взаимная симпатия! Теперь вы можете связаться друг с другом в Telegram\n\n${message.text}`, reply_markup: message.markup });
+    else await ctx.reply(`💕 У вас взаимная симпатия! Теперь вы можете связаться друг с другом в Telegram\n\n${message.text}`, { reply_markup: message.markup });
   }
 });
 
@@ -78,13 +79,9 @@ composer.callbackQuery(/^likes:telegram:(\d+)$/, async (ctx) => {
     await ctx.reply("Telegram доступен только после взаимной симпатии.");
     return;
   }
-  const stored = await store.get<Profile>(profileKey(target));
-  const profile = stored ? withTelegramDefaults(stored) : undefined;
-  if (!profile?.showTelegramOnMatch) { await ctx.reply("Пользователь не разрешил показывать Telegram"); return; }
-  if (!profile.telegramUsername) { await ctx.reply("Пользователь не указал Telegram"); return; }
-  const audit = await store.get<Array<{ event: string; openedBy: number; target: number; at: number }>>(eventsKey()) ?? [];
-  audit.push({ event: "telegram_revealed", openedBy: requester, target, at: now() });
-  await store.set(eventsKey(), audit.slice(-1000));
-  await ctx.reply(`Telegram пользователя: https://t.me/${profile.telegramUsername}`);
+  const profile = await store.get<Profile>(profileKey(target));
+  if (!profile) { await ctx.reply("Профиль собеседника больше недоступен."); return; }
+  const contact = contactArea(profile, id);
+  await ctx.reply(contact.text, { reply_markup: contact.markup });
 });
 export default composer;

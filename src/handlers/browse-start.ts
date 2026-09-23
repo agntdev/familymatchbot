@@ -29,6 +29,7 @@ import {
   type SearchFilters,
 } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
+import { notifyMutualMatch } from "../match-ui.js";
 
 registerMainMenuItem({ label: "Знакомства", data: "browse:start", order: 20 });
 const composer = new Composer<Ctx>();
@@ -181,19 +182,6 @@ async function createMatch(ctx: Ctx, target: number): Promise<Match | undefined>
   return match;
 }
 
-function matchText(profile: Profile): string {
-  return `Взаимная симпатия 💛\n${profile.name}, ${profile.age}\n📍 ${profile.city}\n\nМожно начать спокойный разговор.`;
-}
-
-async function notifyMatch(ctx: Ctx, recipient: number, matchedProfile: Profile): Promise<void> {
-  const text = matchText(matchedProfile);
-  const reply_markup = inlineKeyboard([[inlineButton("💬 Написать сообщение", `conversation:open:${canonicalMatchId(userId(ctx), recipient)}`)]]);
-  try {
-    if (matchedProfile.photos[0]) await ctx.api.sendPhoto(recipient, matchedProfile.photos[0], { caption: text, reply_markup });
-    else await ctx.api.sendMessage(recipient, text, { reply_markup });
-  } catch { /* A blocked or deleted account must not break the match. */ }
-}
-
 composer.callbackQuery("browse:start", async (ctx) => { await ctx.answerCallbackQuery(); await browseProfiles(ctx); });
 
 composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
@@ -226,8 +214,8 @@ composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
   const match = await createMatch(ctx, target);
   if (match) {
     const mine = await store.get<Profile>(profileKey(me));
-    if (mine) await notifyMatch(ctx, me, profile);
-    await notifyMatch(ctx, target, mine ?? profile);
+    if (mine) await notifyMutualMatch(ctx, me, profile, match.match_id);
+    await notifyMutualMatch(ctx, target, mine ?? profile, match.match_id);
   }
   await browseProfiles(ctx);
 });
