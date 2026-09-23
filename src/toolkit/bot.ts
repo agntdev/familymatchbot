@@ -83,9 +83,9 @@ export async function setDefaultCommands<S extends object>(bot: Bot<BotContext<S
     { command: "matches", description: "Взаимные симпатии" },
     { command: "messages", description: "Сообщения" },
     { command: "filters", description: "Фильтры поиска" },
-    { command: "vip", description: "VIP" },
-    { command: "settings", description: "Настройки" },
-    { command: "help", description: "Помощь" },
+    { command: "vip", description: "Возможности для серьёзных знакомств" },
+    { command: "settings", description: "Настройки анкеты и безопасности" },
+    { command: "help", description: "О «Никах» и безопасности" },
   ];
   try {
     await bot.api.setMyCommands(commands, { scope: { type: "default" }, language_code: "ru" });

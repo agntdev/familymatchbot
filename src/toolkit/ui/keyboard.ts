@@ -103,7 +103,7 @@ export function paginate<T>(items: ReadonlyArray<T>, opts: PaginateOptions): Pag
     row.push(inlineButton(opts.prevLabel ?? "« Prev", `${prefix}:prev:${page - 1}`));
   }
   if (page < totalPages - 1) {
-    row.push(inlineButton(opts.nextLabel ?? "Next »", `${prefix}:next:${page + 1}`));
+    row.push(inlineButton(opts.nextLabel ?? "Дальше »", `${prefix}:next:${page + 1}`));
   }
   const controls: InlineKeyboardMarkup = {
     inline_keyboard: row.length > 0 ? [row] : [],

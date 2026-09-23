@@ -2,11 +2,11 @@ import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 
-registerMainMenuItem({ label: "VIP", data: "vip:open", order: 55 });
+registerMainMenuItem({ label: "Особые возможности", data: "vip:open", order: 55 });
 const composer = new Composer<Ctx>();
 
 function show(ctx: Ctx) {
-  return ctx.reply("VIP пока готовится. Мы сообщим, когда станут доступны дополнительные возможности.", {
+  return ctx.reply("Дополнительные возможности для серьёзных знакомств пока готовятся. Мы сообщим, когда они станут доступны.", {
     reply_markup: inlineKeyboard([[inlineButton("⬅️ В меню", "menu:main")]]),
   });
 }

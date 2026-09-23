@@ -29,7 +29,7 @@ composer.command("profile", async (ctx) => {
     });
     return;
   }
-  await ctx.reply("Откройте свою анкету, чтобы посмотреть или изменить её.", {
+    await ctx.reply("Откройте свою анкету, чтобы рассказать о себе и планах на семью.", {
     reply_markup: inlineKeyboard([[inlineButton("Мой профиль", "profile:manage")], [inlineButton("⬅️ В меню", "menu:main")]]),
   });
 });
@@ -41,30 +41,30 @@ composer.command("search", async (ctx) => {
 
 composer.command("likes", async (ctx) => {
   interrupt(ctx);
-  await ctx.reply("Проверяю ваши симпатии.", { reply_markup: inlineKeyboard([[inlineButton("Посмотреть лайки", "likes:list")], [inlineButton("⬅️ В меню", "menu:main")]]) });
+  await ctx.reply("Посмотрим, кому вы понравились.", { reply_markup: inlineKeyboard([[inlineButton("Посмотреть симпатии", "likes:list")], [inlineButton("⬅️ В меню", "menu:main")]]) });
 });
 
 composer.command("matches", async (ctx) => {
   interrupt(ctx);
   const ids = await new DomainStore(ctx).get<string[]>(matchesKey(userId(ctx))) ?? [];
-  await ctx.reply(ids.length ? "Ваши взаимные симпатии ждут в сообщениях." : "Пока взаимных симпатий нет — знакомьтесь, и всё обязательно начнётся с доброго шага.", {
+  await ctx.reply(ids.length ? "Взаимная симпатия уже открыла вам путь к спокойному знакомству." : "Пока взаимных симпатий нет — знакомьтесь без спешки, и всё может начаться с доброго шага.", {
     reply_markup: inlineKeyboard([[inlineButton("Открыть сообщения", "conversations:list")], [inlineButton("⬅️ В меню", "menu:main")]]),
   });
 });
 
 composer.command("messages", async (ctx) => {
   interrupt(ctx);
-  await ctx.reply("Открываю ваши разговоры.", { reply_markup: inlineKeyboard([[inlineButton("Открыть сообщения", "conversations:list")], [inlineButton("⬅️ В меню", "menu:main")]]) });
+  await ctx.reply("Здесь хранятся ваши разговоры с взаимными симпатиями.", { reply_markup: inlineKeyboard([[inlineButton("Открыть разговоры", "conversations:list")], [inlineButton("⬅️ В меню", "menu:main")]]) });
 });
 
 composer.command("filters", async (ctx) => {
   interrupt(ctx);
-  await ctx.reply("Открываю фильтры поиска.", { reply_markup: inlineKeyboard([[inlineButton("Изменить фильтры", "search:open")], [inlineButton("⬅️ В меню", "menu:main")]]) });
+  await ctx.reply("Настройте поиск человека, с которым вам будет близко строить семью.", { reply_markup: inlineKeyboard([[inlineButton("Настроить поиск", "search:open")], [inlineButton("⬅️ В меню", "menu:main")]]) });
 });
 
 composer.command("settings", async (ctx) => {
   interrupt(ctx);
-  await ctx.reply("Настройки профиля и безопасности доступны здесь.", { reply_markup: inlineKeyboard([[inlineButton("Открыть настройки", "settings:open")], [inlineButton("⬅️ В меню", "menu:main")]]) });
+  await ctx.reply("Здесь можно позаботиться о видимости анкеты и безопасности.", { reply_markup: inlineKeyboard([[inlineButton("Открыть настройки", "settings:open")], [inlineButton("⬅️ В меню", "menu:main")]]) });
 });
 
 export { interrupt };

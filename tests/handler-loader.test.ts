@@ -20,7 +20,7 @@ describe("buildBot handler loader", () => {
         name: "unknown text hits the fallback",
         steps: [
           { send: { text: "qwerty" },
-            expect: [{ method: "sendMessage", payload: { text: "Sorry, I didn't understand that. Try /help." } }] },
+            expect: [{ method: "sendMessage", payload: { text: "Я не совсем понял(а) сообщение. Откройте /start и выберите нужную кнопку." } }] },
         ],
       }),
     ]);
