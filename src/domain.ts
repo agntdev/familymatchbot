@@ -13,10 +13,14 @@ export interface Profile {
   profession: string;
   height: number;
   purpose: string;
+  childrenPreference?: string;
+  religionValues?: string;
+  smokingDrinking?: string;
   relationshipIntent: "serious";
   preferredAgeFrom?: number;
   preferredAgeTo?: number;
   preferredGender?: string;
+  blockedUserIds?: number[];
   visibility: boolean;
   createdAt: number;
   updatedAt: number;
@@ -102,6 +106,7 @@ export class DomainStore {
 export function userId(ctx: { from?: { id: number } }): number { return ctx.from?.id ?? 0; }
 export function profileKey(id: number): string { return `profile:${id}`; }
 export function likesKey(id: number): string { return `likes:${id}`; }
+export function skipsKey(id: number): string { return `skips:${id}`; }
 export function matchesKey(id: number): string { return `matches:${id}`; }
 export function messagesKey(id: string): string { return `messages:${id}`; }
 export function profileSummary(p: Profile): string {
@@ -112,3 +117,4 @@ export function profileSummary(p: Profile): string {
 export function profileIndexKey(): string { return "profiles:index"; }
 export function reportKey(id: string): string { return `report:${id}`; }
 export function matchKey(id: string): string { return `match:${id}`; }
+export function eventsKey(): string { return "events:index"; }
