@@ -21,7 +21,17 @@
         "expect": [
           {
             "method": "sendMessage",
-            "payload": { "text": "Настройте видимость профиля и удалите данные, когда захотите." }
+            "payload": {
+              "text": "Настройте видимость профиля и удалите данные, когда захотите.",
+              "reply_markup": {
+                "inline_keyboard": [
+                  [{ "text": "Мой профиль", "callback_data": "profile:manage" }],
+                  [{ "text": "Показывать мой Telegram при взаимной симпатии: Нет", "callback_data": "settings:telegram:toggle" }],
+                  [{ "text": "Удалить аккаунт", "callback_data": "settings:delete" }],
+                  [{ "text": "⬅️ В меню", "callback_data": "menu:main" }]
+                ]
+              }
+            }
           }
         ]
       },

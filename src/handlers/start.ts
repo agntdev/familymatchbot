@@ -23,7 +23,14 @@ composer.command("start", async (ctx) => {
 // "Back to menu" — re-render the main menu in place from any sub-view.
 composer.callbackQuery("menu:main", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.editMessageText(WELCOME, { reply_markup: mainMenuKeyboard() });
+  // A menu button can be attached to a photo card. Telegram cannot edit a
+  // photo into text, so render a fresh menu for media messages and keep the
+  // quieter in-place navigation for ordinary text messages.
+  if (ctx.callbackQuery.message?.text !== undefined) {
+    await ctx.editMessageText(WELCOME, { reply_markup: mainMenuKeyboard() });
+  } else {
+    await ctx.reply(WELCOME, { reply_markup: mainMenuKeyboard() });
+  }
 });
 
 export default composer;
