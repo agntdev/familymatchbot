@@ -18,11 +18,13 @@ import {
   profileIndexKey,
   profileKey,
   reportKey,
+  searchFiltersKey,
   skipsKey,
   userId,
   type Like,
   type Match,
   type Profile,
+  type SearchFilters,
 } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 
@@ -37,6 +39,7 @@ function actionKeyboard(target: number, includeReport = false) {
     inlineButton("👤 Подробнее", `browse:view:${target}`),
   ]];
   if (includeReport) rows.push([inlineButton("Пожаловаться", `browse:report:${target}`)]);
+  rows.push([inlineButton("🔎 Изменить поиск", "search:open")]);
   rows.push([inlineButton("⬅️ В меню", "menu:main")]);
   return inlineKeyboard(rows);
 }
@@ -79,6 +82,22 @@ function ageMatches(viewer: Profile | undefined, candidate: Profile): boolean {
   return true;
 }
 
+function searchMatches(filters: SearchFilters | undefined, candidate: Profile): boolean {
+  if (!filters) return true;
+  if (filters.gender !== "any" && candidate.gender !== filters.gender) return false;
+  if (filters.ageFrom !== undefined && candidate.age < filters.ageFrom) return false;
+  if (filters.ageTo !== undefined && candidate.age > filters.ageTo) return false;
+  if (filters.city && candidate.city.trim().toLocaleLowerCase() !== filters.city.trim().toLocaleLowerCase()) return false;
+  if (filters.relationshipStatus !== "any") {
+    const status = candidate.maritalStatus;
+    const matches = filters.relationshipStatus === "single" ? status === "Не был(а) в браке" :
+      filters.relationshipStatus === "relationship" ? status === "В отношениях" :
+        filters.relationshipStatus === "divorced" ? status === "Разведён(а)" : status === "Вдовец или вдова";
+    if (!matches) return false;
+  }
+  return true;
+}
+
 async function excluded(store: DomainStore, viewer: number, candidate: number): Promise<boolean> {
   const viewerProfile = await store.get<Profile>(profileKey(viewer));
   if (viewerProfile?.blockedUserIds?.includes(candidate)) return true;
@@ -112,14 +131,15 @@ async function nextProfile(ctx: Ctx): Promise<void> {
   const ids = await store.get<number[]>(profileIndexKey()) ?? [];
   const mine = userId(ctx);
   const viewer = await store.get<Profile>(profileKey(mine));
+  const filters = await store.get<SearchFilters>(searchFiltersKey(mine));
   for (const id of ids) {
     if (id === mine) continue;
     const profile = await store.get<Profile>(profileKey(id));
-    if (!profile?.visibility || !ageMatches(viewer, profile) || await excluded(store, mine, id)) continue;
+    if (!profile?.visibility || !ageMatches(viewer, profile) || !searchMatches(filters, profile) || await excluded(store, mine, id)) continue;
     await sendCard(ctx, profile);
     return;
   }
-  await ctx.reply("Пока подходящих анкет нет — загляните позже.", { reply_markup: back });
+  await ctx.reply("Пока подходящих анкет нет — загляните позже.", { reply_markup: inlineKeyboard([[inlineButton("🔎 Изменить поиск", "search:open")], [inlineButton("Расширить поиск", "search:clear")], [inlineButton("⬅️ В меню", "menu:main")]]) });
 }
 
 async function ensureTarget(ctx: Ctx, target: number): Promise<Profile | undefined> {

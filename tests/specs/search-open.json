@@ -1,0 +1,48 @@
+[
+  {
+    "name": "Search opens from the menu and validates age",
+    "steps": [
+      {
+        "send": { "callback": "search:open" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Настроим поиск подходящих анкет.\n\nВыберите пол человека, которого хотите встретить." }
+          }
+        ]
+      },
+      {
+        "send": { "callback": "search:gender:f" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "От какого возраста искать? Укажите число от 18 до 99." }
+          }
+        ]
+      },
+      {
+        "send": { "text": "17" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Укажите целый возраст от 18 до 99 лет." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Search shows a friendly empty state entry",
+    "steps": [
+      {
+        "send": { "callback": "browse:start" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Пока подходящих анкет нет — загляните позже." }
+          }
+        ]
+      }
+    ]
+  }
+]
