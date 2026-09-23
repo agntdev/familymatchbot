@@ -1,17 +1,11 @@
 import { Composer } from "grammy";
+import type { Ctx } from "../bot.js";
+import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
+import { likesKey, matchId, matchesKey, now, read, userId, write, type Like, type Match, type Profile } from "../domain/store.js";
 
-// SCAFFOLD — generated from the bot blueprint BEFORE the agent runs.
-// Keep a LIVE registration (.command / .callbackQuery / …) so this feature is
-// never an empty stub. Replace the reply body with real logic + copy; if you
-// change the user-facing text, update tests/specs to match EXACTLY.
-// Do NOT rewrite src/bot.ts — buildBot() already auto-loads this module.
-// Menu: wire this into /start via registerMainMenuItem({ label: "Likes", data: "likes:list" }) if the toolkit exposes it.
-
-const composer = new Composer();
-
-composer.callbackQuery("likes:list", async (ctx) => {
-  await ctx.answerCallbackQuery();
-  await ctx.reply("See people who liked you; accept to create a match or ignore");
-});
-
+registerMainMenuItem({ label: "Кому вы понравились", data: "likes:list", order: 30 });
+const composer = new Composer<Ctx>();
+composer.callbackQuery("likes:list", async (ctx) => { await ctx.answerCallbackQuery(); await show(ctx); });
+composer.callbackQuery(/^likes:(accept|ignore):(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const me = userId(ctx); const from = ctx.match[2]; const list = await read<Like[]>(ctx, likesKey(me)) ?? []; const item = list.find((x) => x.from === from); if (!item) { await ctx.reply("Эта симпатия уже обработана."); return; } if (ctx.match[1] === "ignore") { item.status = "ignored"; await write(ctx, likesKey(me), list); await ctx.reply("Хорошо, эту симпатию мы больше не покажем."); await show(ctx); return; } const reciprocal = await read<Like>(ctx, `like:${me}:${from}`); if (!reciprocal || reciprocal.status === "ignored") { await ctx.reply("Ответная симпатия появится, когда человек тоже отметит вас."); return; } item.status = "matched"; reciprocal.status = "matched"; await write(ctx, likesKey(me), list); await write(ctx, `like:${from}:${me}`, reciprocal); const match: Match = { id: matchId(me, from), a: me, b: from, active: true, at: now() }; await write(ctx, `${matchesKey(me)}:${from}`, match); await write(ctx, `${matchesKey(from)}:${me}`, match); await ctx.reply("Симпатия взаимна. Теперь можно начать разговор.", { reply_markup: inlineKeyboard([[inlineButton("Написать", `conversation:open:${from}`)]]) }); try { await ctx.api.sendMessage(Number(from), "Ваша симпатия взаимна. Можно начать разговор."); } catch { /* blocked users are harmless */ } });
+async function show(ctx: Ctx): Promise<void> { const list = (await read<Like[]>(ctx, likesKey(userId(ctx))) ?? []).filter((x) => x.status === "pending"); if (!list.length) { await ctx.reply("Пока никто не проявил симпатию — загляните позже.", { reply_markup: inlineKeyboard([[inlineButton("Смотреть анкеты", "browse:start")]]) }); return; } const x = list[0]; const p = await read<Profile>(ctx, `profile:${x.from}`); await ctx.reply(p ? `${p.name}, ${p.age}, ${p.city}\n\n${p.bio}` : "Эта анкета больше недоступна.", { reply_markup: inlineKeyboard([[inlineButton("Ответить взаимностью", `likes:accept:${x.from}`), inlineButton("Не показывать", `likes:ignore:${x.from}`)], [inlineButton("Смотреть профиль", `browse:view:${x.from}`)]]) }); }
 export default composer;

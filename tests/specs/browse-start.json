@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Open the discovery queue (one profile card at a time)"
+              "text": "Сначала создайте анкету — так подбор будет точнее."
             }
           }
         ],
