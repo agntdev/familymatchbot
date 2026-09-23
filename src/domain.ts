@@ -48,7 +48,22 @@ export interface Match {
   b?: number;
   at?: number;
 }
-export interface Message { id: string; matchId: string; from: number; to: number; text: string; sentAt: number; readAt?: number; delivered: boolean }
+export interface Message {
+  id: string;
+  matchId: string;
+  from: number;
+  to: number;
+  text: string;
+  sentAt: number;
+  readAt?: number;
+  delivered: boolean;
+  // Canonical names used by the messaging contract. The short names remain
+  // supported so records written by the starter revision stay readable.
+  sender_id?: number;
+  recipient_id?: number;
+  created_at?: number;
+  read?: boolean;
+}
 export interface Report { id: string; reporter: number; target: number; reason: string; details?: string; snapshot: Profile; at: number }
 
 export const now = (): number => Date.now();
@@ -148,6 +163,8 @@ export function likeIndexKey(from: number): string { return `likes:index:${from}
 export function skipsKey(id: number): string { return `skips:${id}`; }
 export function matchesKey(id: number): string { return `matches:${id}`; }
 export function messagesKey(id: string): string { return `messages:${id}`; }
+export function blockKey(blocker: number, blocked: number): string { return `block:${blocker}:${blocked}`; }
+export function blocksKey(blocker: number): string { return `blocks:${blocker}`; }
 export function profileSummary(p: Profile): string {
   const photoLine = p.photos.length > 1 ? `\n📷 Фото: ${p.photos.length}` : "";
   return `💛 ${p.name}, ${p.age}\n📍 ${p.city}\n💍 ${p.maritalStatus}\n🎓 ${p.education}\n💼 ${p.profession}\n📏 ${p.height} см${photoLine}\n\nО себе: ${p.bio}\n\nЦель знакомства: ${p.purpose}`;

@@ -10,6 +10,7 @@ export interface Session {
   draft?: { name?: string; age?: number; city?: string; photos?: string[]; gender?: string; maritalStatus?: string; education?: string; profession?: string; height?: number; bio?: string; purpose?: string; preferredAgeFrom?: number; preferredAgeTo?: number; preferredGender?: string };
   activeMatchId?: string;
   activeTargetId?: number;
+  lastMessageAt?: number;
   reportReason?: string;
   expiresAt?: number;
   editField?: string;
