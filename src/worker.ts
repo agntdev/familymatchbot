@@ -12,6 +12,7 @@
 
 import { webhookCallback, Composer, type Bot } from "grammy";
 import { buildBot, type Ctx } from "./bot.js";
+import { setDefaultCommands } from "./toolkit/index.js";
 import { handlers } from "./handlers.generated.js";
 import { createDurableSessionStorage, type WorkerEnv } from "./toolkit/session/durable.js";
 
@@ -49,6 +50,7 @@ function getBot(env: WorkerEnv): Promise<Bot<Ctx>> {
         telemetryReporterOptions: { flushOnRecord: true, startTimer: false },
       });
       await bot.init();
+      await setDefaultCommands(bot);
       return bot;
     })();
     botPromise.catch(() => {

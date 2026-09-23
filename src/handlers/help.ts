@@ -15,6 +15,11 @@ const HELP =
 const backToMenu = inlineKeyboard([[inlineButton("⬅️ Back to menu", "menu:main")]]);
 
 composer.command("help", async (ctx) => {
+  ctx.session.step = "idle";
+  ctx.session.draft = undefined;
+  ctx.session.searchDraft = undefined;
+  ctx.session.editField = undefined;
+  ctx.session.activeMatchId = undefined;
   await ctx.reply(HELP);
 });
 
