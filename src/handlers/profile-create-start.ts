@@ -177,14 +177,12 @@ async function reserveUsername(ctx: Ctx, value: string): Promise<"saved" | "conf
   const ownerKey = telegramUsernameOwnerKey(value);
   const owner = await store.get<number>(ownerKey);
   if (owner !== undefined && owner !== id) {
-    console.info("telegram username conflict", { username: value.toLowerCase(), owner, attemptedBy: id });
     return "conflict";
   }
   const ownerSaved = owner === id || await store.setIfAbsent(ownerKey, id);
   if (!ownerSaved) return "unavailable";
   const userSaved = await store.set(telegramUsernameKey(id), value);
   if (!userSaved) return "unavailable";
-  console.info("telegram username saved", { userId: id, username: value.toLowerCase() });
   return "saved";
 }
 

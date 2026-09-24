@@ -1,5 +1,5 @@
 /** Canonical links for this bot itself. User profile links are built elsewhere. */
-export const BOT_USERNAME = "nikahzkvi";
+export const BOT_USERNAME = "nikahvzk";
 export const BOT_MENTION = `@${BOT_USERNAME}`;
 export const BOT_WEB_URL = `https://t.me/${BOT_USERNAME}`;
 export const BOT_TELEGRAM_URL = `tg://resolve?domain=${BOT_USERNAME}`;

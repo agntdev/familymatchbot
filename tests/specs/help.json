@@ -12,10 +12,10 @@
               "reply_markup": {
                 "inline_keyboard": [
                   [
-                    { "text": "Открыть Telegram", "url": "tg://resolve?domain=nikahzkvi" },
-                    { "text": "Открыть в браузере", "url": "https://t.me/nikahzkvi" }
+                    { "text": "Открыть Telegram", "url": "tg://resolve?domain=nikahvzk" },
+                    { "text": "Открыть в браузере", "url": "https://t.me/nikahvzk" }
                   ],
-                  [{ "text": "🔗 Пригласить друга", "url": "https://t.me/nikahzkvi?start=ref123" }],
+                  [{ "text": "🔗 Пригласить друга", "url": "https://t.me/nikahvzk?start=ref123" }],
                   [{ "text": "⬅️ В меню", "callback_data": "menu:main" }]
                 ]
               }

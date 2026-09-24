@@ -298,7 +298,7 @@ export function profileSummary(p: Profile): string {
 export function photoCaption(value: string): string {
   // Telegram measures caption length in UTF-16 code units. Keep a margin for
   // platform-side normalization instead of sending the boundary value.
-  const safeLimit = 900;
+  const safeLimit = 800;
   if (value.length <= safeLimit) return value;
   // Leave the ellipsis inside the limit and avoid cutting a surrogate pair at
   // the boundary. Telegram rejects the entire sendPhoto call when a caption is

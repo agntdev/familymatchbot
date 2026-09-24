@@ -50,7 +50,8 @@ composer.callbackQuery("profile:edit:telegram", async (ctx) => {
   await ctx.answerCallbackQuery();
   ctx.session.telegramPrivacyNoticeShown = true;
   await ctx.reply(TELEGRAM_PRIVACY_NOTICE);
-  const username = normalizeTelegramUsername(`@${ctx.from?.username ?? ""}`);
+  // Ask explicitly instead of silently importing the public Telegram username.
+  const username = null;
   ctx.session.editField = "telegram";
   ctx.session.draft = { telegramUsername: username };
   if (username) { ctx.session.step = "telegram"; await ctx.reply(`📱 Telegram: @${username}`, { reply_markup: inlineKeyboard([[inlineButton("Подтвердить", "profile:edit:telegram:confirm"), inlineButton("Изменить", "profile:edit:telegram:change")]]) }); return; }
@@ -78,14 +79,12 @@ async function saveTelegramEdit(ctx: Ctx): Promise<void> {
     const ownerKey = telegramUsernameOwnerKey(value);
     const owner = await store.get<number>(ownerKey);
     if (owner !== undefined && owner !== userId(ctx)) {
-      console.info("telegram username conflict", { username: value.toLowerCase(), owner, attemptedBy: userId(ctx) });
       await ctx.reply("Этот username уже используется. Укажите другой username.", { reply_markup: inlineKeyboard([[inlineButton("Изменить username", "profile:edit:telegram:change")]]) });
       return;
     }
     const ownerSaved = owner === userId(ctx) || await store.setIfAbsent(ownerKey, userId(ctx));
     if (!ownerSaved) { await ctx.reply("Не удалось сохранить username. Попробуйте ещё раз."); return; }
     if (!(await store.set(telegramUsernameKey(userId(ctx)), value))) { await ctx.reply("Не удалось сохранить username. Попробуйте ещё раз."); return; }
-    console.info("telegram username saved", { userId: userId(ctx), username: value.toLowerCase() });
   }
   if (previousValue && previousValue.toLowerCase() !== value?.toLowerCase()) {
     const previousOwnerKey = telegramUsernameOwnerKey(previousValue);
