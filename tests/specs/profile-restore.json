@@ -14,5 +14,32 @@
         ]
       }
     ]
+  },
+  {
+    "name": "hiding keeps the recovery path available",
+    "steps": [
+      {
+        "send": { "callback": "profile:delete" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": {
+              "text": "Скрыть профиль? Данные сохранятся, и вы сможете восстановить анкету позже."
+            }
+          }
+        ]
+      },
+      {
+        "send": { "callback": "profile:delete:confirm" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": {
+              "text": "Профиль скрыт. Ваши данные сохранены — вы сможете восстановить анкету из главного меню."
+            }
+          }
+        ]
+      }
+    ]
   }
 ]

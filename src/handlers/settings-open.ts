@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, deactivateProfileRelationships, matchesKey, profileIndexKey, profileKey, userId, withTelegramDefaults, now, type Profile } from "../domain.js";
+import { DomainStore, profileKey, userId, withTelegramDefaults, now, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 registerMainMenuItem({ label: "Настройки", data: "settings:open", order: 60 });
 const composer = new Composer<Ctx>();
@@ -12,29 +12,15 @@ composer.callbackQuery("settings:delete:yes", async (ctx) => {
   const id = userId(ctx);
   const store = new DomainStore(ctx);
   const profile = await store.get<Profile>(profileKey(id));
-  const ids = await store.get<number[]>(profileIndexKey()) ?? [];
-  const matchIds = await deactivateProfileRelationships(store, id, ids);
-  for (const candidate of ids) if (candidate !== id) {
-    const otherMatches = await store.get<string[]>(matchesKey(candidate)) ?? [];
-    await store.set(matchesKey(candidate), otherMatches.filter((matchId) => !matchIds.includes(matchId)));
-  }
-  for (const matchId of matchIds) {
-    const match = await store.get<{ user_a_id?: number; user_b_id?: number }>(`match:${matchId}`);
-    const other = match && (match.user_a_id === id ? match.user_b_id : match.user_a_id);
-    if (other) {
-      const otherMatches = await store.get<string[]>(matchesKey(other)) ?? [];
-      await store.set(matchesKey(other), otherMatches.filter((value) => value !== matchId));
-      try { await ctx.api.sendMessage(other, "Пользователь удалил профиль. Этот разговор больше недоступен."); } catch { /* blocked users are safe to ignore */ }
-    }
-  }
   if (profile) {
-    profile.accountStatus = "deleted";
+    if (profile.status && !["draft", "active", "hidden", "deleted"].includes(profile.status)) profile.userStatus = profile.status;
+    profile.status = "hidden";
+    profile.accountStatus = "hidden";
     profile.visibility = false;
     profile.isComplete = true;
     profile.updatedAt = now();
     await store.set(profileKey(id), profile);
   }
-  await store.set(profileIndexKey(), ids.filter((candidate) => candidate !== id));
   const admin = adminChatId(ctx);
   if (admin) { try { await ctx.api.sendMessage(admin, `Пользователь удалил аккаунт${profile ? `: ${profile.name}` : ""}.`); } catch { /* best effort */ } }
   await ctx.reply("Профиль скрыт. Ваши данные сохранены — вы сможете восстановить анкету из главного меню.", { reply_markup: inlineKeyboard([[inlineButton("В меню", "menu:main")]]) });

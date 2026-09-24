@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, deactivateProfileRelationships, isProfileComplete, matchesKey, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, profileLifecycle, profileRegistrationKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, profileSummary, validTelegramUsername, withTelegramDefaults, type Profile } from "../domain.js";
+import { DomainStore, isProfileComplete, normalizeTelegramUsername, now, photoCaption, profileKey, profileLifecycle, profileRegistrationKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, profileSummary, validTelegramUsername, withTelegramDefaults, type Profile } from "../domain.js";
 import { continueRegistration } from "./profile-create-start.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit } from "../content-policy.js";
@@ -44,7 +44,7 @@ composer.callbackQuery("profile:edit:maritalStatus", async (ctx) => { await ctx.
 composer.callbackQuery(/^profile:marital:set:(single|relationship|divorced|widowed)$/, async (ctx) => { await ctx.answerCallbackQuery(); const p = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx))); if (!p) { await ctx.reply("Профиль не найден."); return; } p.maritalStatus = ({ single: "Не был(а) в браке", relationship: "В отношениях", divorced: "Разведён(а)", widowed: "Вдовец или вдова" } as Record<string, string>)[ctx.match[1]]; p.updatedAt = now(); await new DomainStore(ctx).set(profileKey(p.userId), p); await ctx.reply("Семейный статус обновлён.", { reply_markup: inlineKeyboard([[inlineButton("Мой профиль", "profile:manage")]]) }); });
 composer.callbackQuery(/^profile:edit:(name|age|city|nationality|profession|height|bio|purpose)$/, async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.editField = ctx.match[1]; ctx.session.step = "edit_field"; const labels: Record<string, string> = { name: "имя", age: "возраст от 18 до 99", city: "город", nationality: "национальность до 100 символов", profession: "профессию", height: "рост от 120 до 230 см", bio: "рассказ о себе", purpose: "цель знакомства" }; await ctx.reply(`Введите ${labels[ctx.match[1]]}.`, { reply_markup: force("Введите новое значение") }); });
 composer.callbackQuery("profile:edit:status", async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.editField = "status"; ctx.session.step = "edit_field"; await ctx.reply("Напишите статус — до 100 символов.", { reply_markup: inlineKeyboard([[inlineButton("Удалить статус", "profile:status:clear")], [inlineButton("⬅️ Назад", "profile:edit:fields")]]) }); });
-composer.callbackQuery("profile:status:clear", async (ctx) => { await ctx.answerCallbackQuery(); const store = new DomainStore(ctx); const p = await store.get<Profile>(profileKey(userId(ctx))); if (!p) { await ctx.reply("Профиль не найден."); return; } p.status = null; p.updatedAt = now(); await store.set(profileKey(p.userId), p); ctx.session.step = "idle"; ctx.session.editField = undefined; await ctx.reply("Статус удалён.", { reply_markup: inlineKeyboard([[inlineButton("Открыть профиль", "profile:manage")]]) }); });
+composer.callbackQuery("profile:status:clear", async (ctx) => { await ctx.answerCallbackQuery(); const store = new DomainStore(ctx); const p = await store.get<Profile>(profileKey(userId(ctx))); if (!p) { await ctx.reply("Профиль не найден."); return; } p.userStatus = null; p.updatedAt = now(); await store.set(profileKey(p.userId), p); ctx.session.step = "idle"; ctx.session.editField = undefined; await ctx.reply("Статус удалён.", { reply_markup: inlineKeyboard([[inlineButton("Открыть профиль", "profile:manage")]]) }); });
 composer.callbackQuery("profile:edit:telegram", async (ctx) => {
   await ctx.answerCallbackQuery();
   ctx.session.telegramPrivacyNoticeShown = true;
@@ -65,7 +65,7 @@ composer.on("message:text", async (ctx, next) => {
     await ctx.reply(username ? `📱 Telegram: @${username}` : "📱 Telegram: не указан", { reply_markup: inlineKeyboard([[inlineButton("Подтвердить", "profile:edit:telegram:confirm"), inlineButton("Изменить", "profile:edit:telegram:change")]]) }); return;
   }
   if (ctx.session.step !== "edit_field" || !ctx.session.editField) { await next(); return; }
-  const value = ctx.message.text.trim(); const field = ctx.session.editField; const stored = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx))); if (!stored) { ctx.session.step = "idle"; await ctx.reply("Профиль не найден. Создайте его заново."); return; } const p = withTelegramDefaults(stored); const max = field === "status" || field === "nationality" ? 100 : field === "bio" ? Number.POSITIVE_INFINITY : 500; if (field !== "bio" && (!value || value.length > max)) { await ctx.reply(field === "status" ? "Статус должен быть от 1 до 100 символов." : field === "nationality" ? "Укажите национальность от 1 до 100 символов." : "Значение должно быть от 1 до 500 символов.", { reply_markup: force("Введите новое значение") }); return; } if (field === "telegram") { return; } else if (field === "status") { p.status = value || null; } else if (field === "city") { p.city = value; } else if (field === "age") { const n = Number(value); if (!Number.isInteger(n) || n < 18 || n > 99) { await ctx.reply("Укажите возраст от 18 до 99 лет.", { reply_markup: force("Введите возраст") }); return; } p.age = n; } else if (field === "height") { const n = Number(value); if (!Number.isInteger(n) || n < 120 || n > 230) { await ctx.reply("Укажите рост от 120 до 230 сантиметров.", { reply_markup: force("Например, 170") }); return; } p.height = n; } else (p as unknown as Record<string, unknown>)[field] = value;
+  const value = ctx.message.text.trim(); const field = ctx.session.editField; const stored = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx))); if (!stored) { ctx.session.step = "idle"; await ctx.reply("Профиль не найден. Создайте его заново."); return; } const p = withTelegramDefaults(stored); const max = field === "status" || field === "nationality" ? 100 : field === "bio" ? Number.POSITIVE_INFINITY : 500; if (field !== "bio" && (!value || value.length > max)) { await ctx.reply(field === "status" ? "Статус должен быть от 1 до 100 символов." : field === "nationality" ? "Укажите национальность от 1 до 100 символов." : "Значение должно быть от 1 до 500 символов.", { reply_markup: force("Введите новое значение") }); return; } if (field === "telegram") { return; } else if (field === "status") { p.userStatus = value || null; } else if (field === "city") { p.city = value; } else if (field === "age") { const n = Number(value); if (!Number.isInteger(n) || n < 18 || n > 99) { await ctx.reply("Укажите возраст от 18 до 99 лет.", { reply_markup: force("Введите возраст") }); return; } p.age = n; } else if (field === "height") { const n = Number(value); if (!Number.isInteger(n) || n < 120 || n > 230) { await ctx.reply("Укажите рост от 120 до 230 сантиметров.", { reply_markup: force("Например, 170") }); return; } p.height = n; } else (p as unknown as Record<string, unknown>)[field] = value;
   if (field !== "bio") { const decision = inspectProfileText({ name: p.name, city: p.city, nationality: p.nationality, profession: p.profession, purpose: p.purpose }); await recordPolicyAudit(ctx, decision.kind === "allowed" ? "allowed" : "allowed-with-suggestion", decision); if (decision.kind === "suggestion") { await ctx.reply(decision.message!, { reply_markup: force("Введите чуть подробнее") }); return; } if (decision.kind === "explicit") { const event = await enforceViolation(ctx, decision); ctx.session.step = "idle"; await ctx.reply(blockMessage(event!), { reply_markup: menu }); return; } }
   p.updatedAt = now(); await new DomainStore(ctx).set(profileKey(p.userId), p); ctx.session.step = "idle"; ctx.session.editField = undefined; await ctx.reply("Изменения сохранены.", { reply_markup: inlineKeyboard([[inlineButton("Открыть профиль", "profile:manage")]]) }); });
 async function saveTelegramEdit(ctx: Ctx): Promise<void> {
@@ -112,29 +112,15 @@ composer.callbackQuery("profile:delete:confirm", async (ctx) => {
   const id = userId(ctx);
   const store = new DomainStore(ctx);
   const p = await store.get<Profile>(profileKey(id));
-  const profileIds = await store.get<number[]>(profileIndexKey()) ?? [];
-  const matchIds = await deactivateProfileRelationships(store, id, profileIds);
-  for (const candidate of profileIds) if (candidate !== id) {
-    const otherMatches = await store.get<string[]>(matchesKey(candidate)) ?? [];
-    await store.set(matchesKey(candidate), otherMatches.filter((matchId) => !matchIds.includes(matchId)));
-  }
-  for (const matchId of matchIds) {
-    const match = await store.get<{ user_a_id?: number; user_b_id?: number }>(`match:${matchId}`);
-    const other = match && (match.user_a_id === id ? match.user_b_id : match.user_a_id);
-    if (other) {
-      const otherMatches = await store.get<string[]>(matchesKey(other)) ?? [];
-      await store.set(matchesKey(other), otherMatches.filter((value) => value !== matchId));
-      try { await ctx.api.sendMessage(other, "Пользователь удалил профиль. Этот разговор больше недоступен."); } catch { /* blocked users are safe to ignore */ }
-    }
-  }
   if (p) {
-    p.accountStatus = "deleted";
+    if (p.status && !["draft", "active", "hidden", "deleted"].includes(p.status)) p.userStatus = p.status;
+    p.status = "hidden";
+    p.accountStatus = "hidden";
     p.visibility = false;
     p.isComplete = true;
     p.updatedAt = now();
     await store.set(profileKey(id), p);
   }
-  await store.set(profileIndexKey(), profileIds.filter((candidate) => candidate !== id));
   const admin = adminChatId(ctx);
   if (admin) { try { await ctx.api.sendMessage(admin, `Пользователь удалил профиль${p ? `: ${p.name}` : "."}`); } catch { /* best effort */ } }
   ctx.session.step = "idle";
