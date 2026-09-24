@@ -45,7 +45,9 @@ export interface Profile {
   rules_accepted?: boolean;
   /** User-written status badge, max 100 characters. */
   status?: string | null;
-  /** Account lifecycle state; older records used status for this field. */
+  /** User-written status badge. `status` is reserved for lifecycle state. */
+  userStatus?: string | null;
+  /** Account lifecycle state; retained as a compatibility mirror for old data. */
   accountStatus?: "draft" | "active" | "hidden" | "deleted";
 }
 
@@ -235,25 +237,31 @@ export function isProfileComplete(profile: Partial<Profile>): boolean {
 
 /** Only active, visible records may enter discovery or matching flows. */
 export function isDiscoverable(profile: Partial<Profile> | undefined): boolean {
-  if (!profile || profileLifecycle(profile) === "deleted" || profileLifecycle(profile) === "hidden") return false;
+  const lifecycle = profile && profileLifecycle(profile);
+  if (!profile || lifecycle === "hidden" || lifecycle === "deleted") return false;
   return profile.visibility === true;
 }
 
 /** Read lifecycle state across the pre-status and current profile formats. */
 export function profileLifecycle(profile: Partial<Profile>): "draft" | "active" | "hidden" | "deleted" | undefined {
-  if (profile.accountStatus) return profile.accountStatus;
   if (profile.status === "draft" || profile.status === "active" || profile.status === "hidden" || profile.status === "deleted") {
     return profile.status;
   }
+  if (profile.accountStatus) return profile.accountStatus;
   return undefined;
 }
 
 /** Return only the user-written badge text, excluding legacy lifecycle values. */
 export function profileStatus(profile: Partial<Profile>): string | null {
-  if (profile.status === undefined || profile.status === null) return null;
-  if (!profile.accountStatus && ["draft", "active", "hidden", "deleted"].includes(profile.status)) return null;
-  const value = profile.status.trim();
-  return value ? value.slice(0, 100) : null;
+  const value = profile.userStatus ?? (
+    profile.status !== undefined && profile.status !== null &&
+    !["draft", "active", "hidden", "deleted"].includes(profile.status)
+      ? profile.status
+      : null
+  );
+  if (value === null || value === undefined) return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, 100) : null;
 }
 /** Durable username records let registration reserve a name before publishing. */
 export function telegramUsernameKey(id: number): string { return `telegram-username:${id}`; }
@@ -340,33 +348,8 @@ export function makeMatch(a: number, b: number, at = now()): Match {
   return { match_id: `${pair[0]}-${pair[1]}`, user_a_id: pair[0], user_b_id: pair[1], created_at: at, active: true };
 }
 
-/** Preserve the profile while taking it out of every relationship projection. */
+/** Compatibility helper. Hiding a profile must not alter its relationships. */
 export async function deactivateProfileRelationships(store: DomainStore, id: number, profileIds: number[]): Promise<string[]> {
-  const matchIds = await store.get<string[]>(matchesKey(id)) ?? [];
-  for (const candidate of profileIds) {
-    const likes = await store.get<Like[]>(likesKey(candidate)) ?? [];
-    let changed = false;
-    for (const like of likes) {
-      if (likeFrom(like) === id || likeTo(like) === id) {
-        if (like.status !== "ignored") { like.status = "ignored"; changed = true; }
-      }
-    }
-    if (changed) await store.set(likesKey(candidate), likes);
-  }
-  const ownLikes = await store.get<Like[]>(likesKey(id)) ?? [];
-  for (const like of ownLikes) like.status = "ignored";
-  await store.set(likesKey(id), ownLikes);
-  for (const matchId of matchIds) {
-    const match = await store.get<Match>(matchKey(matchId));
-    if (!match) continue;
-    match.active = false;
-    await store.set(matchKey(matchId), match);
-    const other = matchA(match) === id ? matchB(match) : matchA(match);
-    if (other) {
-      const otherMatches = await store.get<string[]>(matchesKey(other)) ?? [];
-      await store.set(matchesKey(other), otherMatches.filter((value) => value !== matchId));
-    }
-  }
-  await store.set(matchesKey(id), []);
-  return matchIds;
+  void profileIds;
+  return await store.get<string[]>(matchesKey(id)) ?? [];
 }

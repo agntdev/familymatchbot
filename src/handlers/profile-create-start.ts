@@ -71,16 +71,16 @@ composer.callbackQuery("profile:create:start", async (ctx) => {
   if (blocked) { await ctx.reply(blockMessage(blocked), { reply_markup: await mainMenuFor(ctx) }); return; }
   const existing = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx)));
   if (existing) {
-    if (profileLifecycle(existing) !== "deleted" && !isProfileComplete(existing) && (existing.rulesAccepted || existing.rules_accepted)) {
+    if (profileLifecycle(existing) !== "hidden" && profileLifecycle(existing) !== "deleted" && !isProfileComplete(existing) && (existing.rulesAccepted || existing.rules_accepted)) {
       ctx.session.draft ??= { photos: existing.photos ?? [], rulesAccepted: true };
       ctx.session.step ??= "consent";
       await continueRegistration(ctx);
       return;
     }
-    const action = profileLifecycle(existing) === "deleted"
+    const action = profileLifecycle(existing) === "hidden" || profileLifecycle(existing) === "deleted"
       ? inlineButton("♻️ Восстановить анкету", "profile:restore")
       : inlineButton("Мой профиль", "profile:manage");
-    await ctx.reply(profileLifecycle(existing) === "deleted" ? "Анкета сохранена. Вы можете восстановить её без повторной регистрации." : "У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: inlineKeyboard([[action], [inlineButton("⬅️ В меню", "menu:main")]]) });
+    await ctx.reply(profileLifecycle(existing) === "hidden" || profileLifecycle(existing) === "deleted" ? "Анкета сохранена. Вы можете восстановить её без повторной регистрации." : "У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: inlineKeyboard([[action], [inlineButton("⬅️ В меню", "menu:main")]]) });
     return;
   }
   const checkpoint = await new DomainStore(ctx).get<RegistrationCheckpoint>(profileRegistrationKey(userId(ctx)));
@@ -242,7 +242,7 @@ composer.callbackQuery("profile:create:save", async (ctx) => {
   // a deleted or active record with a newly submitted registration.
   const existing = await store.get<Profile>(profileKey(profile.userId));
   if (existing) {
-    await ctx.reply(profileLifecycle(existing) === "deleted" ? "Анкета уже сохранена. Восстановите её из главного меню." : "У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: await mainMenuFor(ctx) });
+    await ctx.reply(profileLifecycle(existing) === "hidden" || profileLifecycle(existing) === "deleted" ? "Анкета уже сохранена. Восстановите её из главного меню." : "У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: await mainMenuFor(ctx) });
     return;
   }
   const saved = await store.setIfAbsent(profileKey(profile.userId), profile);
@@ -267,12 +267,13 @@ composer.callbackQuery("profile:restore", async (ctx) => {
     await ctx.reply("Сохранённой анкеты нет. Создайте новую анкету.", { reply_markup: await mainMenuFor(ctx) });
     return;
   }
-  if (profileLifecycle(profile) !== "deleted") {
+  if (profileLifecycle(profile) !== "hidden" && profileLifecycle(profile) !== "deleted") {
     await ctx.reply("Ваша анкета уже активна.", { reply_markup: await mainMenuFor(ctx) });
     return;
   }
+  if (profile.status && !["draft", "active", "hidden", "deleted"].includes(profile.status) && !profile.userStatus) profile.userStatus = profile.status;
+  profile.status = "active";
   profile.accountStatus = "active";
-  profile.status = profile.status && ["draft", "active", "hidden", "deleted"].includes(profile.status) ? null : profile.status;
   profile.visibility = true;
   profile.isComplete = true;
   profile.updatedAt = now();

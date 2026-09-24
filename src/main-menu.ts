@@ -9,12 +9,12 @@ import { inlineButton, inlineKeyboard, mainMenuItems, type InlineKeyboardMarkup 
  */
 export async function mainMenuFor(ctx: Ctx): Promise<InlineKeyboardMarkup> {
   const profile = await new DomainStore(ctx).get<Parameters<typeof isProfileComplete>[0]>(profileKey(userId(ctx)));
-  const deleted = profile ? profileLifecycle(profile) === "deleted" : false;
-  const completed = profile !== undefined && !deleted && isProfileComplete(profile);
+  const hidden = profile ? profileLifecycle(profile) === "hidden" || profileLifecycle(profile) === "deleted" : false;
+  const completed = profile !== undefined && !hidden && isProfileComplete(profile);
   const items = mainMenuItems().filter((item) => {
     if (item.data === "profile:create:start") return profile === undefined;
     if (item.data === "profile:manage") return completed;
-    if (item.data === "profile:restore") return deleted;
+    if (item.data === "profile:restore") return hidden;
     return true;
   });
   const rows = [];
