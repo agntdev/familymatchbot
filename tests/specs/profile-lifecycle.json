@@ -15,7 +15,7 @@
       { "send": { "callback": "profile:photos:done" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Укажите вашу национальность." } }] },
       { "send": { "callback": "profile:nationality:Россия" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Чем вы занимаетесь?" } }] },
       { "send": { "text": "Врач" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Какой у вас рост в сантиметрах?" } }] },
-      { "send": { "text": "170" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Подсказка: опишите себя от 50 до 1000 слов.\n\n📝 Расскажите о себе" } }] },
+      { "send": { "text": "170" }, "expect": [{ "method": "sendMessage", "payload": { "text": "📝 Расскажите о себе" } }] },
       { "send": { "text": "Мне близки спокойствие, уважение и честность. Я люблю читать, гулять по городу, путешествовать и проводить время с семьёй. В отношениях ценю заботу, доброту, открытый разговор, взаимную поддержку и готовность вместе решать сложные вопросы. Хочу встретить зрелого человека для серьёзных отношений, создания семьи и общего будущего. Верю, что доверие, чувство юмора и уважение к личным границам помогают сохранить близость на долгие годы." }, "expect": [{ "method": "sendMessage", "payload": { "text": "Что вы ищете в отношениях?" } }] },
       { "send": { "text": "Семью и взаимную поддержку." }, "expect": [{ "method": "sendMessage", "payload": { "text": "Пожалуйста, укажите ваш Telegram username в формате @username" } }] },
       { "send": { "text": "@anna_test" }, "expect": [{ "method": "sendPhoto" }] },
