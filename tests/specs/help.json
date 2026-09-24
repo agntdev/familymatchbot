@@ -12,8 +12,8 @@
               "reply_markup": {
                 "inline_keyboard": [
                   [
-                    { "text": "Открыть Telegram", "url": "tg://resolve?domain=nikahvzk" },
-                    { "text": "Открыть в браузере", "url": "https://t.me/nikahvzk" }
+                    { "text": "Открыть Telegram", "url": "tg://resolve?domain=nikahzkvi" },
+                    { "text": "Открыть в браузере", "url": "https://t.me/nikahzkvi" }
                   ],
                   [{ "text": "⬅️ В меню", "callback_data": "menu:main" }]
                 ]
