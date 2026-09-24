@@ -2,7 +2,7 @@ import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import {
   DomainStore, adminBlockedKey, blockKey, blocksKey, matchA, matchB, matchesKey, matchKey,
-  messagesKey, messageEventKey, now, photoCaption, profileKey, reportKey, userId, isDiscoverable,
+  messagesKey, messageEventKey, now, photoCaption, profileKey, profileStatus, reportKey, userId, isDiscoverable,
   type Match, type Message, type Profile,
 } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
@@ -46,7 +46,8 @@ function chatKeyboard(id: string, enabled: boolean) {
 }
 
 function header(profile: Profile): string {
-  return `💬 ${profile.name}, ${profile.age}\n📍 ${profile.city}`;
+  const status = profileStatus(profile);
+  return `💬 ${profile.name}, ${profile.age}${status ? `\n💬 ${status}` : ""}\n📍 ${profile.city}`;
 }
 
 function body(messages: Message[], me: number): string {

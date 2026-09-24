@@ -1,5 +1,5 @@
 import type { Ctx } from "./bot.js";
-import { DomainStore, isProfileComplete, profileKey, userId } from "./domain.js";
+import { DomainStore, isProfileComplete, profileKey, profileLifecycle, userId } from "./domain.js";
 import { inlineButton, inlineKeyboard, mainMenuItems, type InlineKeyboardMarkup } from "./toolkit/index.js";
 
 /**
@@ -9,7 +9,7 @@ import { inlineButton, inlineKeyboard, mainMenuItems, type InlineKeyboardMarkup 
  */
 export async function mainMenuFor(ctx: Ctx): Promise<InlineKeyboardMarkup> {
   const profile = await new DomainStore(ctx).get<Parameters<typeof isProfileComplete>[0]>(profileKey(userId(ctx)));
-  const deleted = profile?.status === "deleted";
+  const deleted = profile ? profileLifecycle(profile) === "deleted" : false;
   const completed = profile !== undefined && !deleted && isProfileComplete(profile);
   const items = mainMenuItems().filter((item) => {
     if (item.data === "profile:create:start") return profile === undefined;

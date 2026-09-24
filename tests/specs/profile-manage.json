@@ -14,6 +14,32 @@
         "send": {
           "callback": "profile:manage"
         }
+      },
+      {
+        "send": { "callback": "profile:edit:fields" },
+        "expect": [
+          {
+            "method": "editMessageText",
+            "payload": { "text": "Что хотите изменить?" }
+          }
+        ]
+      },
+      {
+        "send": { "callback": "profile:edit:status" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Напишите статус — до 100 символов." }
+          }
+        ]
+      },
+      {
+        "send": { "text": "Мой статус" },
+        "expect": [
+          {
+            "method": "sendMessage"
+          }
+        ]
       }
     ]
   }

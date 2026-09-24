@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, type Profile } from "../domain.js";
+import { DomainStore, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, profileLifecycle, telegramUsernameKey, telegramUsernameOwnerKey, userId, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { activeRegistrationBlock, blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit, registrationState } from "../content-policy.js";
 import { mainMenuFor } from "../main-menu.js";
@@ -50,10 +50,10 @@ composer.callbackQuery("profile:create:start", async (ctx) => {
   if (blocked) { await ctx.reply(blockMessage(blocked), { reply_markup: await mainMenuFor(ctx) }); return; }
   const existing = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx)));
   if (existing) {
-    const action = existing.status === "deleted"
+    const action = profileLifecycle(existing) === "deleted"
       ? inlineButton("♻️ Восстановить анкету", "profile:restore")
       : inlineButton("Мой профиль", "profile:manage");
-    await ctx.reply(existing.status === "deleted" ? "Анкета сохранена. Вы можете восстановить её без повторной регистрации." : "У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: inlineKeyboard([[action], [inlineButton("⬅️ В меню", "menu:main")]]) });
+    await ctx.reply(profileLifecycle(existing) === "deleted" ? "Анкета сохранена. Вы можете восстановить её без повторной регистрации." : "У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: inlineKeyboard([[action], [inlineButton("⬅️ В меню", "menu:main")]]) });
     return;
   }
   ctx.session.draft = { photos: [] }; ctx.session.telegramPrivacyNoticeShown = false; begin(ctx, "rules");
@@ -201,13 +201,13 @@ composer.callbackQuery("profile:create:save", async (ctx) => {
   await recordPolicyAudit(ctx, decision.kind === "allowed" ? "allowed" : "allowed-with-suggestion", decision);
   if (decision.kind === "suggestion") { await ctx.reply(decision.message!, { reply_markup: previewKeyboard() }); return; }
   if (decision.kind === "explicit") { const event = await enforceViolation(ctx, decision); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.reply(blockMessage(event!), { reply_markup: await mainMenuFor(ctx) }); return; }
-  const timestamp = now(); const telegramUsername = d.telegramUsername ?? null; const usernameConfirmed = telegramUsername !== null && d.usernameConfirmed === true; const profile: Profile = { userId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, nationality: d.nationality!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, isComplete: true, status: "active", telegramUsername, telegramUsernameConfirmed: usernameConfirmed, telegram_username: telegramUsername, telegram_username_confirmed: usernameConfirmed, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
+  const timestamp = now(); const telegramUsername = d.telegramUsername ?? null; const usernameConfirmed = telegramUsername !== null && d.usernameConfirmed === true; const profile: Profile = { userId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, nationality: d.nationality!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, isComplete: true, accountStatus: "active", status: null, telegramUsername, telegramUsernameConfirmed: usernameConfirmed, telegram_username: telegramUsername, telegram_username_confirmed: usernameConfirmed, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
   const store = new DomainStore(ctx);
   // The profile key is the per-Telegram-ID uniqueness boundary. Never replace
   // a deleted or active record with a newly submitted registration.
   const existing = await store.get<Profile>(profileKey(profile.userId));
   if (existing) {
-    await ctx.reply(existing.status === "deleted" ? "Анкета уже сохранена. Восстановите её из главного меню." : "У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: await mainMenuFor(ctx) });
+    await ctx.reply(profileLifecycle(existing) === "deleted" ? "Анкета уже сохранена. Восстановите её из главного меню." : "У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: await mainMenuFor(ctx) });
     return;
   }
   const saved = await store.setIfAbsent(profileKey(profile.userId), profile);
@@ -231,11 +231,12 @@ composer.callbackQuery("profile:restore", async (ctx) => {
     await ctx.reply("Сохранённой анкеты нет. Создайте новую анкету.", { reply_markup: await mainMenuFor(ctx) });
     return;
   }
-  if (profile.status !== "deleted") {
+  if (profileLifecycle(profile) !== "deleted") {
     await ctx.reply("Ваша анкета уже активна.", { reply_markup: await mainMenuFor(ctx) });
     return;
   }
-  profile.status = "active";
+  profile.accountStatus = "active";
+  profile.status = profile.status && ["draft", "active", "hidden", "deleted"].includes(profile.status) ? null : profile.status;
   profile.visibility = true;
   profile.isComplete = true;
   profile.updatedAt = now();
