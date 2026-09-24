@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, normalizeTelegramUsername, now, profileIndexKey, profileKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, type Profile } from "../domain.js";
+import { DomainStore, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { activeRegistrationBlock, blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit, registrationState } from "../content-policy.js";
 
@@ -61,7 +61,7 @@ composer.on("message:text", async (ctx, next) => {
   if (ctx.session.step === "age") { const age = Number(text); if (!Number.isInteger(age) || age < 18 || age > 99) { await ctx.reply("Укажите целый возраст от 18 до 99 лет.", { reply_markup: force("Введите возраст") }); return; } d.age = age; begin(ctx, "gender"); await ctx.reply("Как вы себя определяете?", { reply_markup: choose([[inlineButton("Женщина", "profile:gender:f"), inlineButton("Мужчина", "profile:gender:m")], [inlineButton("Другое", "profile:gender:other")]]) }); return; }
   if (ctx.session.step === "city") { d.city = text; begin(ctx, "marital"); await ctx.reply("Каков ваш семейный статус?", { reply_markup: choose([[inlineButton("Не был(а) в браке", "profile:marital:single"), inlineButton("В отношениях", "profile:marital:relationship")], [inlineButton("Разведён(а)", "profile:marital:divorced"), inlineButton("Вдовец или вдова", "profile:marital:widowed")]]) }); return; }
   if (ctx.session.step === "nationality" || ctx.session.step === "nationality_manual") { if (text.length < 1 || text.length > 100) { await ctx.reply("Укажите национальность не длиннее 100 символов.", { reply_markup: force("Введите национальность") }); return; } d.nationality = text; begin(ctx, "profession"); await ctx.reply("Чем вы занимаетесь?", { reply_markup: force("Напишите профессию") }); return; }
-  if (["profession", "about", "purpose"].includes(ctx.session.step ?? "")) { const step = ctx.session.step; if (step === "profession") { if (text.length < 2 || text.length > 500) { await ctx.reply("Ответ должен быть от 2 до 500 символов. Попробуйте ещё раз.", { reply_markup: force("Введите ответ") }); return; } d.profession = text; } if (step === "about") { const decision = inspectProfileText({ bio: text }); await recordPolicyAudit(ctx, decision.kind === "allowed" ? "bio-accepted" : "bio-review", decision); if (decision.kind === "suggestion") { await ctx.reply(decision.message!, { reply_markup: force("Расскажите о себе") }); return; } if (decision.kind === "explicit") { const event = await enforceViolation(ctx, decision); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.reply(blockMessage(event!), { reply_markup: menu }); return; } d.bio = text; } if (step === "purpose") { if (text.length < 2 || text.length > 500) { await ctx.reply("Ответ должен быть от 2 до 500 символов. Попробуйте ещё раз.", { reply_markup: force("Введите ответ") }); return; } d.purpose = text; } const nextStep = step === "profession" ? "height" : step === "about" ? "purpose" : "telegram"; begin(ctx, nextStep); if (nextStep === "height") await ctx.reply("Какой у вас рост в сантиметрах?", { reply_markup: force("Например, 170") }); else if (nextStep === "purpose") await ctx.reply("Что вы ищете в отношениях?", { reply_markup: force("Напишите коротко о цели") }); else await askTelegram(ctx); return; }
+  if (["profession", "about", "purpose"].includes(ctx.session.step ?? "")) { const step = ctx.session.step; if (step === "profession") { if (text.length < 2 || text.length > 500) { await ctx.reply("Ответ должен быть от 2 до 500 символов. Попробуйте ещё раз.", { reply_markup: force("Введите ответ") }); return; } d.profession = text; } if (step === "about") { d.bio = text; } if (step === "purpose") { if (text.length < 2 || text.length > 500) { await ctx.reply("Ответ должен быть от 2 до 500 символов. Попробуйте ещё раз.", { reply_markup: force("Введите ответ") }); return; } d.purpose = text; } const nextStep = step === "profession" ? "height" : step === "about" ? "purpose" : "telegram"; begin(ctx, nextStep); if (nextStep === "height") await ctx.reply("Какой у вас рост в сантиметрах?", { reply_markup: force("Например, 170") }); else if (nextStep === "purpose") await ctx.reply("Что вы ищете в отношениях?", { reply_markup: force("Напишите коротко о цели") }); else await askTelegram(ctx); return; }
   if (ctx.session.step === "height") { const height = Number(text); if (!Number.isInteger(height) || height < 120 || height > 230) { await ctx.reply("Укажите рост от 120 до 230 сантиметров.", { reply_markup: force("Например, 170") }); return; } d.height = height; begin(ctx, "about"); await ctx.reply("📝 Расскажите о себе", { reply_markup: force("Напишите о себе") }); return; }
   if (ctx.session.step === "telegram_manual" && ctx.session.editField !== "telegram") {
     if (text === "Пропустить") { d.telegramUsername = null; await showPreview(ctx); return; }
@@ -147,7 +147,7 @@ async function reserveUsername(ctx: Ctx, value: string): Promise<"saved" | "conf
 async function showPreview(ctx: Ctx): Promise<void> {
   begin(ctx, "preview");
   const d = draft(ctx);
-  if (d.photos?.[0]) await ctx.replyWithPhoto(d.photos[0], { caption: previewText(d), reply_markup: previewKeyboard() });
+  if (d.photos?.[0]) await ctx.replyWithPhoto(d.photos[0], { caption: photoCaption(previewText(d)), reply_markup: previewKeyboard() });
   else await ctx.reply(previewText(d), { reply_markup: previewKeyboard() });
 }
 
@@ -188,7 +188,7 @@ composer.callbackQuery("profile:create:save", async (ctx) => {
   const blocked = await activeRegistrationBlock(ctx); if (blocked) { await ctx.reply(blockMessage(blocked), { reply_markup: menu }); return; }
   const required = d.name && d.age && d.city && d.photos?.length && d.maritalStatus && d.nationality && d.profession && d.height && d.bio && d.purpose && d.telegramUsername !== undefined;
   if (!required) { await ctx.reply("Профиль ещё не заполнен. Вернитесь к изменению и добавьте все поля."); return; }
-  const decision = inspectProfileText({ name: d.name, nationality: d.nationality, profession: d.profession, bio: d.bio, purpose: d.purpose });
+  const decision = inspectProfileText({ name: d.name, nationality: d.nationality, profession: d.profession, purpose: d.purpose });
   await recordPolicyAudit(ctx, decision.kind === "allowed" ? "allowed" : "allowed-with-suggestion", decision);
   if (decision.kind === "suggestion") { await ctx.reply(decision.message!, { reply_markup: previewKeyboard() }); return; }
   if (decision.kind === "explicit") { const event = await enforceViolation(ctx, decision); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.reply(blockMessage(event!), { reply_markup: menu }); return; }

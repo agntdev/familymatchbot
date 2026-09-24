@@ -25,6 +25,7 @@ import {
   viewedActionKey,
   viewedKey,
   userId,
+  photoCaption,
   type Like,
   type Match,
   type Profile,
@@ -135,7 +136,7 @@ async function sendCard(ctx: Ctx, profile: Profile): Promise<void> {
   await recordEvent(ctx, "view", profile.userId);
   ctx.session.activeTargetId = profile.userId;
   if (profile.photos[0]) {
-    await ctx.replyWithPhoto(profile.photos[0], { caption: cardText(profile), reply_markup: actionKeyboard(profile.userId) });
+    await ctx.replyWithPhoto(profile.photos[0], { caption: photoCaption(cardText(profile)), reply_markup: actionKeyboard(profile.userId) });
   } else {
     await ctx.reply(cardText(profile), { reply_markup: actionKeyboard(profile.userId) });
   }
@@ -158,9 +159,9 @@ async function replaceCard(ctx: Ctx, profile: Profile | undefined): Promise<void
     ]);
   if (isPhotoMessage(message)) {
     if (profile?.photos[0]) {
-      await ctx.editMessageMedia({ type: "photo", media: profile.photos[0], caption: text }, { reply_markup: markup });
+      await ctx.editMessageMedia({ type: "photo", media: profile.photos[0], caption: photoCaption(text) }, { reply_markup: markup });
     } else {
-      await ctx.editMessageCaption({ caption: text, reply_markup: markup });
+      await ctx.editMessageCaption({ caption: photoCaption(text), reply_markup: markup });
     }
     return;
   }
@@ -284,7 +285,7 @@ composer.callbackQuery(/^browse:view:(\d+)$/, async (ctx) => {
     await ctx.reply(fullProfileText(profile), { reply_markup: actionKeyboard(target, true) });
     return;
   }
-  await ctx.replyWithPhoto(profile.photos[0], { caption: fullProfileText(profile), reply_markup: actionKeyboard(target, true) });
+  await ctx.replyWithPhoto(profile.photos[0], { caption: photoCaption(fullProfileText(profile)), reply_markup: actionKeyboard(target, true) });
   for (const photo of profile.photos.slice(1)) await ctx.replyWithPhoto(photo);
 });
 

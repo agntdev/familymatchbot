@@ -2,7 +2,7 @@ import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import {
   DomainStore, adminBlockedKey, blockKey, blocksKey, matchA, matchB, matchesKey, matchKey,
-  messagesKey, messageEventKey, now, profileKey, reportKey, userId,
+  messagesKey, messageEventKey, now, photoCaption, profileKey, reportKey, userId,
   type Match, type Message, type Profile,
 } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
@@ -80,7 +80,7 @@ async function openChat(ctx: Ctx, id: string): Promise<void> {
   if (changed) await store.set(messagesKey(key), messages);
   ctx.session.activeMatchId = key;
   const text = `${header(profile)}\n\n${body(messages, userId(ctx))}`;
-  if (profile.photos[0]) await ctx.replyWithPhoto(profile.photos[0], { caption: text, reply_markup: chatKeyboard(key, true) });
+  if (profile.photos[0]) await ctx.replyWithPhoto(profile.photos[0], { caption: photoCaption(text), reply_markup: chatKeyboard(key, true) });
   else await ctx.reply(text, { reply_markup: chatKeyboard(key, true) });
 }
 
@@ -112,7 +112,7 @@ composer.callbackQuery("conversations:list", async (ctx) => {
     const badge = card.unread ? `\nНовых сообщений: ${card.unread}` : "";
     const text = `${header(card.profile)}\n\n${card.preview}\nВремя: ${card.when}${badge}`;
     const markup = inlineKeyboard([[inlineButton("Открыть разговор", `conversation:open:${card.id}`)]]);
-    if (card.profile.photos[0]) await ctx.replyWithPhoto(card.profile.photos[0], { caption: text, reply_markup: markup });
+    if (card.profile.photos[0]) await ctx.replyWithPhoto(card.profile.photos[0], { caption: photoCaption(text), reply_markup: markup });
     else await ctx.reply(text, { reply_markup: markup });
   }
   await ctx.reply("Выберите разговор или вернитесь в меню.", { reply_markup: inlineKeyboard([[inlineButton("В меню", "menu:main")]]) });
