@@ -7,7 +7,31 @@
         "expect": [
           {
             "method": "sendMessage",
-            "payload": { "text": "👋 Добро пожаловать в «Никах» — здесь знакомятся для серьёзных отношений и создания семьи. Выберите, с чего начнём." }
+            "payload": {
+              "text": "👋 Добро пожаловать в «Никах» — здесь знакомятся для серьёзных отношений и создания семьи. Выберите, с чего начнём.",
+              "reply_markup": {
+                "inline_keyboard": [
+                  [
+                    { "text": "📝 Создать анкету", "callback_data": "profile:create:start" },
+                    { "text": "Знакомства", "callback_data": "browse:start" }
+                  ],
+                  [
+                    { "text": "🔎 Изменить поиск", "callback_data": "search:open" },
+                    { "text": "Вам понравились", "callback_data": "likes:list" }
+                  ],
+                  [
+                    { "text": "Сообщения", "callback_data": "conversations:list" },
+                    { "text": "Особые возможности", "callback_data": "vip:open" }
+                  ],
+                  [
+                    { "text": "Настройки", "callback_data": "settings:open" }
+                  ],
+                  [
+                    { "text": "❓ Помощь", "callback_data": "menu:help" }
+                  ]
+                ]
+              }
+            }
           }
         ]
       }
