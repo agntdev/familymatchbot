@@ -3,6 +3,7 @@ import type { Ctx } from "../bot.js";
 import { DomainStore, adminBlockedKey, canonicalMatchId, likeTo, likesKey, makeMatch, matchesKey, matchKey, now, profileKey, userId, type Like, type Match, type Profile } from "../domain.js";
 import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { notifyMutualMatch } from "../match-ui.js";
+import { mutualMessage } from "../match-ui.js";
 registerMainMenuItem({ label: "Вам понравились", data: "likes:list", order: 40 });
 const composer = new Composer<Ctx>();
 
@@ -18,7 +19,8 @@ composer.callbackQuery("likes:list", async (ctx) => {
       const target = match.user_a_id === userId(ctx) ? match.user_b_id : match.user_a_id;
       const profile = await store.get<Profile>(profileKey(target));
       if (!profile) continue;
-      await ctx.reply(`${profile.name}, ${profile.age} — ${profile.city}`, { reply_markup: inlineKeyboard([[inlineButton("Открыть сообщения", `conversation:open:${matchId}`)]]) });
+      const matchView = mutualMessage(profile, matchId);
+      await ctx.reply(matchView.text, { reply_markup: matchView.markup });
     }
     return;
   }

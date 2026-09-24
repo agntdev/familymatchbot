@@ -23,8 +23,11 @@ export interface Profile {
   preferredGender?: string;
   /** Optional contact sharing, disabled unless the user explicitly opts in. */
   telegramUsername: string | null;
+  /** True only after the user explicitly confirms this stored username. */
+  telegramUsernameConfirmed?: boolean;
   showTelegramOnMatch: boolean;
   telegram_username?: string | null;
+  telegram_username_confirmed?: boolean;
   show_telegram_on_match?: boolean;
   blockedUserIds?: number[];
   visibility: boolean;
@@ -230,6 +233,7 @@ export function withTelegramDefaults(profile: Profile): Profile {
   return {
     ...profile,
     telegramUsername: profile.telegramUsername || profile.telegram_username || null,
+    telegramUsernameConfirmed: profile.telegramUsernameConfirmed === true || profile.telegram_username_confirmed === true,
     showTelegramOnMatch: profile.showTelegramOnMatch === true || profile.show_telegram_on_match === true,
   };
 }
