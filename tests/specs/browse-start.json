@@ -1,6 +1,6 @@
 [
   {
-    "name": "Browse profiles",
+    "name": "Dating keeps a clear empty state when no photo-bearing profiles are available",
     "steps": [
       {
         "expect": [
