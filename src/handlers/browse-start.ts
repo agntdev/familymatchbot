@@ -20,7 +20,6 @@ import {
   reportKey,
   reportsIndexKey,
   adminBlockedKey,
-  searchFiltersKey,
   skipsKey,
   viewedActionKey,
   viewedKey,
@@ -29,7 +28,6 @@ import {
   type Like,
   type Match,
   type Profile,
-  type SearchFilters,
 } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { notifyMutualMatch } from "../match-ui.js";
@@ -95,22 +93,6 @@ function ageMatches(viewer: Profile | undefined, candidate: Profile): boolean {
   return true;
 }
 
-function searchMatches(filters: SearchFilters | undefined, candidate: Profile): boolean {
-  if (!filters) return true;
-  if (filters.gender !== "any" && candidate.gender !== filters.gender) return false;
-  if (filters.ageFrom !== undefined && candidate.age < filters.ageFrom) return false;
-  if (filters.ageTo !== undefined && candidate.age > filters.ageTo) return false;
-  if (filters.city && candidate.city.trim().toLocaleLowerCase() !== filters.city.trim().toLocaleLowerCase()) return false;
-  if (filters.relationshipStatus !== "any") {
-    const status = candidate.maritalStatus;
-    const matches = filters.relationshipStatus === "single" ? status === "Не был(а) в браке" :
-      filters.relationshipStatus === "relationship" ? status === "В отношениях" :
-        filters.relationshipStatus === "divorced" ? status === "Разведён(а)" : status === "Вдовец или вдова";
-    if (!matches) return false;
-  }
-  return true;
-}
-
 async function excluded(store: DomainStore, viewer: number, candidate: number): Promise<boolean> {
   if (await store.get(adminBlockedKey(viewer)) || await store.get(adminBlockedKey(candidate))) return true;
   const viewerProfile = await store.get<Profile>(profileKey(viewer));
@@ -173,11 +155,14 @@ export async function browseProfiles(ctx: Ctx, replaceCurrent = false): Promise<
   const ids = await store.get<number[]>(profileIndexKey()) ?? [];
   const mine = userId(ctx);
   const viewer = await store.get<Profile>(profileKey(mine));
-  const filters = await store.get<SearchFilters>(searchFiltersKey(mine));
   for (const id of ids) {
     if (id === mine) continue;
     const profile = await store.get<Profile>(profileKey(id));
-    if (!profile?.visibility || !ageMatches(viewer, profile) || !searchMatches(filters, profile) || await excluded(store, mine, id)) continue;
+    // Dating is intentionally permissive here. Saved city/description/username
+    // data must never make a real, photo-bearing profile disappear from the
+    // deck. Age and gender preferences on the viewer still define suitability;
+    // safety, visibility, and prior actions are applied by `excluded`.
+    if (!profile?.visibility || !Array.isArray(profile.photos) || profile.photos.length === 0 || !profile.photos[0] || !ageMatches(viewer, profile) || await excluded(store, mine, id)) continue;
     if (replaceCurrent) await replaceCard(ctx, profile);
     else await sendCard(ctx, profile);
     return;

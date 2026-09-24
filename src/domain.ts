@@ -223,9 +223,13 @@ export function profileSummary(p: Profile): string {
 /** Telegram limits photo captions to 1,024 Unicode characters. */
 export function photoCaption(value: string): string {
   const characters = Array.from(value);
-  return characters.length <= 1024
+  // Telegram's caption limit is 1024 UTF-16 code units. Keep a margin for
+  // astral emoji and platform-side normalization instead of sending the
+  // boundary value, which can be rejected as "caption is too long".
+  const safeLimit = 900;
+  return characters.length <= safeLimit
     ? value
-    : `${characters.slice(0, 1023).join("")}…`;
+    : `${characters.slice(0, safeLimit - 1).join("")}…`;
 }
 
 export function profileIndexKey(): string { return "profiles:index"; }
