@@ -216,7 +216,8 @@ export function auditKey(id: string): string { return `admin-audit:${id}`; }
 export function profileSummary(p: Profile): string {
   const photoLine = p.photos.length > 1 ? `\n📷 Фото: ${p.photos.length}` : "";
   const nationalityLine = p.nationality ? `\n🌍 Национальность: ${p.nationality}` : "";
-  return `💛 ${p.name}, ${p.age}\n📍 ${p.city}\n💍 ${p.maritalStatus}${nationalityLine}\n💼 ${p.profession}\n📏 ${p.height} см${photoLine}\n\nО себе: ${p.bio}\n\nЦель знакомства: ${p.purpose}`;
+  const text = `💛 ${p.name}, ${p.age}\n📍 ${p.city}\n💍 ${p.maritalStatus}${nationalityLine}\n💼 ${p.profession}\n📏 ${p.height} см${photoLine}\n\nО себе: ${p.bio}\n\nЦель знакомства: ${p.purpose}`;
+  return text.length <= 1000 ? text : `${text.slice(0, 997)}…`;
 }
 
 export function profileIndexKey(): string { return "profiles:index"; }

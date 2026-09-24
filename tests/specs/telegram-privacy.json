@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Username edit explains privacy before input",
+    "steps": [
+      {
+        "send": { "callback": "profile:edit:telegram" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "🔒 До взаимной симпатии ваш Telegram не видят другие пользователи. Он станет доступен только после взаимной симпатии." } },
+          { "method": "sendMessage", "payload": { "text": "Пожалуйста, укажите ваш Telegram username в формате @username" } }
+        ]
+      },
+      {
+        "send": { "text": "@anna_test" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "📱 Telegram: @anna_test" } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:edit:telegram:change" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Пожалуйста, укажите ваш Telegram username в формате @username" } }
+        ]
+      }
+    ]
+  }
+]
