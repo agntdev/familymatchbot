@@ -34,6 +34,10 @@ export interface Profile {
   vip?: boolean;
   createdAt: number;
   updatedAt: number;
+  /** Set when the user confirms publication. Older records are inferred below. */
+  isComplete?: boolean;
+  is_complete?: boolean;
+  status?: "draft" | "active" | "hidden" | "deleted";
 }
 
 export type SearchGender = "m" | "f" | "other" | "any";
@@ -191,6 +195,30 @@ export class DomainStore {
 
 export function userId(ctx: { from?: { id: number } }): number { return ctx.from?.id ?? 0; }
 export function profileKey(id: number): string { return `profile:${id}`; }
+
+/**
+ * Decide whether a stored profile can replace the registration CTA. Explicit
+ * state wins; legacy records are considered complete only when the fields that
+ * the current registration wizard requires are present.
+ */
+export function isProfileComplete(profile: Partial<Profile>): boolean {
+  if (profile.isComplete === true || profile.is_complete === true || profile.status === "active") return true;
+  if (profile.isComplete === false || profile.is_complete === false || profile.status === "draft" || profile.status === "deleted") return false;
+  return Boolean(
+    profile.name?.trim() &&
+    Number.isInteger(profile.age) && profile.age !== undefined && profile.age >= 18 &&
+    profile.gender?.trim() &&
+    profile.city?.trim() &&
+    Array.isArray(profile.photos) && profile.photos.length >= 1 &&
+    profile.bio?.trim() &&
+    profile.maritalStatus?.trim() &&
+    profile.nationality?.trim() &&
+    profile.profession?.trim() &&
+    Number.isInteger(profile.height) && profile.height !== undefined && profile.height >= 120 &&
+    profile.purpose?.trim() &&
+    profile.relationshipIntent === "serious"
+  );
+}
 /** Durable username records let registration reserve a name before publishing. */
 export function telegramUsernameKey(id: number): string { return `telegram-username:${id}`; }
 export function telegramUsernameOwnerKey(username: string): string {
@@ -222,14 +250,12 @@ export function profileSummary(p: Profile): string {
 
 /** Telegram limits photo captions to 1,024 Unicode characters. */
 export function photoCaption(value: string): string {
-  const characters = Array.from(value);
-  // Telegram's caption limit is 1024 UTF-16 code units. Keep a margin for
-  // astral emoji and platform-side normalization instead of sending the
-  // boundary value, which can be rejected as "caption is too long".
+  // Telegram measures caption length in UTF-16 code units. Keep a margin for
+  // platform-side normalization instead of sending the boundary value.
   const safeLimit = 900;
-  return characters.length <= safeLimit
+  return value.length <= safeLimit
     ? value
-    : `${characters.slice(0, safeLimit - 1).join("")}…`;
+    : `${value.slice(0, safeLimit - 1)}…`;
 }
 
 export function profileIndexKey(): string { return "profiles:index"; }

@@ -4,7 +4,7 @@ import { DomainStore, matchesKey, messagesKey, normalizeTelegramUsername, now, p
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit } from "../content-policy.js";
 
-registerMainMenuItem({ label: "Мой профиль", data: "profile:manage", order: 30 });
+registerMainMenuItem({ label: "👤 Моя анкета", data: "profile:manage", order: 10 });
 const composer = new Composer<Ctx>();
 const back = inlineKeyboard([[inlineButton("⬅️ В меню", "menu:main")]]);
 const menu = back;

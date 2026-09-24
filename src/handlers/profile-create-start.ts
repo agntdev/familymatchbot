@@ -1,10 +1,11 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, type Profile } from "../domain.js";
+import { DomainStore, isProfileComplete, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { activeRegistrationBlock, blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit, registrationState } from "../content-policy.js";
+import { mainMenuFor } from "../main-menu.js";
 
-registerMainMenuItem({ label: "Создать профиль", data: "profile:create:start", order: 10 });
+registerMainMenuItem({ label: "📝 Создать анкету", data: "profile:create:start", order: 10 });
 const composer = new Composer<Ctx>();
 const force = (placeholder: string) => ({ force_reply: true as const, input_field_placeholder: placeholder });
 const menu = inlineKeyboard([[inlineButton("⬅️ В меню", "menu:main")]]);
@@ -44,16 +45,16 @@ composer.callbackQuery("profile:create:start", async (ctx) => {
   await ctx.answerCallbackQuery();
   const blocked = await activeRegistrationBlock(ctx);
   const state = await registrationState(ctx);
-  if (state.permanent_block) { await ctx.reply(blocked ? blockMessage(blocked) : "Создание анкет для вас заблокировано навсегда.", { reply_markup: menu }); return; }
-  if (blocked) { await ctx.reply(blockMessage(blocked), { reply_markup: menu }); return; }
+  if (state.permanent_block) { await ctx.reply(blocked ? blockMessage(blocked) : "Создание анкет для вас заблокировано навсегда.", { reply_markup: await mainMenuFor(ctx) }); return; }
+  if (blocked) { await ctx.reply(blockMessage(blocked), { reply_markup: await mainMenuFor(ctx) }); return; }
   const existing = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx)));
-  if (existing) { await ctx.reply("У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: inlineKeyboard([[inlineButton("Мой профиль", "profile:manage")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; }
+  if (existing && isProfileComplete(existing)) { await ctx.reply("У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: inlineKeyboard([[inlineButton("Мой профиль", "profile:manage")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; }
   ctx.session.draft = { photos: [] }; ctx.session.telegramPrivacyNoticeShown = false; begin(ctx, "rules");
   await ctx.reply(RULES_TEXT, { reply_markup: rulesKeyboard() });
 });
 composer.callbackQuery("profile:rules:accept", async (ctx) => { await ctx.answerCallbackQuery(); draft(ctx).rulesAccepted = true; begin(ctx, "consent"); await ctx.reply("Серьёзные отношения начинаются с уважения. Вы ищете партнёра для серьёзных отношений и семьи?", { reply_markup: choose([[inlineButton("Да, ищу", "profile:consent:yes"), inlineButton("Пока нет", "profile:consent:no")]]) }); });
 composer.callbackQuery("profile:consent:yes", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "name"); await ctx.reply("Как вас зовут?", { reply_markup: force("Введите имя") }); });
-composer.callbackQuery("profile:consent:no", async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.editMessageText("Понимаю. Возвращайтесь, когда будете готовы к серьёзным отношениям.", { reply_markup: menu }); });
+composer.callbackQuery("profile:consent:no", async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.editMessageText("Понимаю. Возвращайтесь, когда будете готовы к серьёзным отношениям.", { reply_markup: await mainMenuFor(ctx) }); });
 
 composer.on("message:text", async (ctx, next) => {
   const text = ctx.message.text.trim(); const d = draft(ctx);
@@ -179,20 +180,21 @@ composer.callbackQuery("profile:create:cancel", async (ctx) => {
   ctx.session.step = "idle";
   ctx.session.draft = undefined;
   const text = "Создание профиля отменено. Вы сможете вернуться к нему в любой момент.";
-  if (ctx.callbackQuery.message?.text !== undefined) await ctx.editMessageText(text, { reply_markup: menu });
-  else await ctx.reply(text, { reply_markup: menu });
+  const mainMenu = await mainMenuFor(ctx);
+  if (ctx.callbackQuery.message?.text !== undefined) await ctx.editMessageText(text, { reply_markup: mainMenu });
+  else await ctx.reply(text, { reply_markup: mainMenu });
 });
 composer.callbackQuery("profile:create:save", async (ctx) => {
   await ctx.answerCallbackQuery(); const d = draft(ctx);
   if (!d.rulesAccepted) { begin(ctx, "rules"); await ctx.reply(RULES_TEXT, { reply_markup: rulesKeyboard() }); return; }
-  const blocked = await activeRegistrationBlock(ctx); if (blocked) { await ctx.reply(blockMessage(blocked), { reply_markup: menu }); return; }
+  const blocked = await activeRegistrationBlock(ctx); if (blocked) { await ctx.reply(blockMessage(blocked), { reply_markup: await mainMenuFor(ctx) }); return; }
   const required = d.name && d.age && d.city && d.photos?.length && d.maritalStatus && d.nationality && d.profession && d.height && d.bio && d.purpose && d.telegramUsername !== undefined;
   if (!required) { await ctx.reply("Профиль ещё не заполнен. Вернитесь к изменению и добавьте все поля."); return; }
   const decision = inspectProfileText({ name: d.name, nationality: d.nationality, profession: d.profession, purpose: d.purpose });
   await recordPolicyAudit(ctx, decision.kind === "allowed" ? "allowed" : "allowed-with-suggestion", decision);
   if (decision.kind === "suggestion") { await ctx.reply(decision.message!, { reply_markup: previewKeyboard() }); return; }
-  if (decision.kind === "explicit") { const event = await enforceViolation(ctx, decision); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.reply(blockMessage(event!), { reply_markup: menu }); return; }
-  const timestamp = now(); const telegramUsername = d.telegramUsername ?? null; const usernameConfirmed = telegramUsername !== null && d.usernameConfirmed === true; const profile: Profile = { userId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, nationality: d.nationality!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, telegramUsername, telegramUsernameConfirmed: usernameConfirmed, telegram_username: telegramUsername, telegram_username_confirmed: usernameConfirmed, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
+  if (decision.kind === "explicit") { const event = await enforceViolation(ctx, decision); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.reply(blockMessage(event!), { reply_markup: await mainMenuFor(ctx) }); return; }
+  const timestamp = now(); const telegramUsername = d.telegramUsername ?? null; const usernameConfirmed = telegramUsername !== null && d.usernameConfirmed === true; const profile: Profile = { userId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, nationality: d.nationality!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, isComplete: true, status: "active", telegramUsername, telegramUsernameConfirmed: usernameConfirmed, telegram_username: telegramUsername, telegram_username_confirmed: usernameConfirmed, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
   const store = new DomainStore(ctx); const saved = await store.set(profileKey(profile.userId), profile); const ids = await store.get<number[]>(profileIndexKey()) ?? []; if (!ids.includes(profile.userId)) await store.set(profileIndexKey(), [...ids, profile.userId]);
   const admin = adminChatId(ctx); if (admin) { try { await ctx.api.sendMessage(admin, `Новая анкета: ${profile.name}, ${profile.age}, ${profile.city}`); } catch { /* delivery is best effort */ } }
   if (!saved) {
@@ -200,6 +202,6 @@ composer.callbackQuery("profile:create:save", async (ctx) => {
     return;
   }
   ctx.session.step = "idle"; ctx.session.draft = undefined;
-  await ctx.reply("Профиль сохранён и опубликован. Желаю вам добрых знакомств.", { reply_markup: menu });
+  await ctx.reply("Профиль сохранён и опубликован. Желаю вам добрых знакомств.", { reply_markup: await mainMenuFor(ctx) });
 });
 export default composer;
