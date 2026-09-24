@@ -1,0 +1,25 @@
+[
+  {
+    "name": "Browse uses the published-profile empty state",
+    "steps": [
+      {
+        "send": { "callback": "browse:start" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Новых анкет пока нет" }
+          }
+        ]
+      },
+      {
+        "send": { "callback": "browse:view:42" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Эта анкета больше недоступна." }
+          }
+        ]
+      }
+    ]
+  }
+]

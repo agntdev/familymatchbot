@@ -15,10 +15,17 @@ composer.callbackQuery("settings:delete:yes", async (ctx) => {
   const store = new DomainStore(ctx);
   const profile = await store.get<Profile>(profileKey(id));
   if (profile) {
-    if (profile.status && !["draft", "active", "hidden", "deleted"].includes(profile.status)) profile.userStatus = profile.status;
+    if (profile.status && !["draft", "active", "published", "hidden", "deleted"].includes(profile.status)) profile.userStatus = profile.status;
     profile.status = "hidden";
     profile.accountStatus = "hidden";
     profile.visibility = false;
+    profile.active = false;
+    profile.hidden = true;
+    profile.deleted = false;
+    profile.is_active = false;
+    profile.is_hidden = true;
+    profile.is_deleted = false;
+    profile.is_test = false;
     profile.isComplete = true;
     profile.updatedAt = now();
     await store.set(profileKey(id), profile);

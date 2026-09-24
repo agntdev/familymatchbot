@@ -48,7 +48,17 @@ export interface Profile {
   /** User-written status badge. `status` is reserved for lifecycle state. */
   userStatus?: string | null;
   /** Account lifecycle state; retained as a compatibility mirror for old data. */
-  accountStatus?: "draft" | "active" | "hidden" | "deleted";
+  accountStatus?: "draft" | "active" | "published" | "hidden" | "deleted";
+  /** Publication/moderation flags are deliberately explicit for discovery. */
+  active?: boolean;
+  hidden?: boolean;
+  deleted?: boolean;
+  isTest?: boolean;
+  /** Snake-case mirrors for records written by earlier data pipelines. */
+  is_active?: boolean;
+  is_hidden?: boolean;
+  is_deleted?: boolean;
+  is_test?: boolean;
 }
 
 export type SearchGender = "m" | "f" | "other" | "any";
@@ -237,14 +247,25 @@ export function isProfileComplete(profile: Partial<Profile>): boolean {
 
 /** Only active, visible records may enter discovery or matching flows. */
 export function isDiscoverable(profile: Partial<Profile> | undefined): boolean {
-  const lifecycle = profile && profileLifecycle(profile);
-  if (!profile || lifecycle === "hidden" || lifecycle === "deleted") return false;
-  return profile.visibility === true;
+  if (!profile) return false;
+  // Discovery is a publication query, not merely a visibility check. The
+  // explicit flags prevent drafts, deleted/moderated accounts, and seed/test
+  // records from leaking into the deck.
+  const lifecycle = profileLifecycle(profile);
+  return (
+    (profile.status === "published" || lifecycle === "active") &&
+    (profile.active === true || profile.is_active === true) &&
+    (profile.deleted === false && profile.is_deleted !== true) &&
+    (profile.hidden === false && profile.is_hidden !== true) &&
+    (profile.isTest === false && profile.is_test !== true) &&
+    profile.visibility === true &&
+    profile.isComplete === true
+  );
 }
 
 /** Read lifecycle state across the pre-status and current profile formats. */
-export function profileLifecycle(profile: Partial<Profile>): "draft" | "active" | "hidden" | "deleted" | undefined {
-  if (profile.status === "draft" || profile.status === "active" || profile.status === "hidden" || profile.status === "deleted") {
+export function profileLifecycle(profile: Partial<Profile>): "draft" | "active" | "published" | "hidden" | "deleted" | undefined {
+  if (profile.status === "draft" || profile.status === "active" || profile.status === "published" || profile.status === "hidden" || profile.status === "deleted") {
     return profile.status;
   }
   if (profile.accountStatus) return profile.accountStatus;
@@ -255,7 +276,7 @@ export function profileLifecycle(profile: Partial<Profile>): "draft" | "active" 
 export function profileStatus(profile: Partial<Profile>): string | null {
   const value = profile.userStatus ?? (
     profile.status !== undefined && profile.status !== null &&
-    !["draft", "active", "hidden", "deleted"].includes(profile.status)
+    !["draft", "active", "published", "hidden", "deleted"].includes(profile.status)
       ? profile.status
       : null
   );

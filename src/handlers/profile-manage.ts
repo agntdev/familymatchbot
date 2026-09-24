@@ -99,7 +99,7 @@ async function saveTelegramEdit(ctx: Ctx): Promise<void> {
 composer.callbackQuery("profile:edit:telegram:confirm", async (ctx) => { await ctx.answerCallbackQuery(); await saveTelegramEdit(ctx); });
 composer.callbackQuery("profile:edit:telegram:change", async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.step = "telegram_manual"; if (!ctx.session.telegramPrivacyNoticeShown) { ctx.session.telegramPrivacyNoticeShown = true; await ctx.reply(TELEGRAM_PRIVACY_NOTICE); } await ctx.reply("Пожалуйста, укажите ваш Telegram username в формате @username", { reply_markup: force("@username") }); });
 composer.callbackQuery("profile:telegram:toggle", async (ctx) => { await ctx.answerCallbackQuery(); const store = new DomainStore(ctx); const stored = await store.get<Profile>(profileKey(userId(ctx))); if (!stored) { await ctx.reply("Сначала создайте профиль."); return; } const p = withTelegramDefaults(stored); p.showTelegramOnMatch = !p.showTelegramOnMatch; p.show_telegram_on_match = p.showTelegramOnMatch; p.updatedAt = now(); await store.set(profileKey(p.userId), p); await ctx.editMessageText("Настройка Telegram обновлена.", { reply_markup: manageKeyboard(p) }); });
-composer.callbackQuery("profile:visibility:toggle", async (ctx) => { await ctx.answerCallbackQuery(); const store = new DomainStore(ctx); const p = await store.get<Profile>(profileKey(userId(ctx))); if (!p) { await ctx.reply("Сначала создайте профиль."); return; } p.visibility = !p.visibility; p.updatedAt = now(); await store.set(profileKey(p.userId), p); await ctx.editMessageText(p.visibility ? "Профиль снова виден другим людям." : "Профиль скрыт и не показывается в знакомствах.", { reply_markup: manageKeyboard(p) }); });
+composer.callbackQuery("profile:visibility:toggle", async (ctx) => { await ctx.answerCallbackQuery(); const store = new DomainStore(ctx); const p = await store.get<Profile>(profileKey(userId(ctx))); if (!p) { await ctx.reply("Сначала создайте профиль."); return; } p.visibility = !p.visibility; p.hidden = !p.visibility; p.active = p.visibility; p.deleted = false; p.is_hidden = !p.visibility; p.is_active = p.visibility; p.is_deleted = false; p.is_test = false; p.isTest = false; p.status = p.visibility ? "published" : "hidden"; p.accountStatus = p.visibility ? "published" : "hidden"; p.updatedAt = now(); await store.set(profileKey(p.userId), p); await ctx.editMessageText(p.visibility ? "Профиль снова виден другим людям." : "Профиль скрыт и не показывается в знакомствах.", { reply_markup: manageKeyboard(p) }); });
 composer.callbackQuery("profile:preview", async (ctx) => { await ctx.answerCallbackQuery(); const p = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx))); if (!p) { await ctx.reply("Сначала создайте профиль."); return; } if (p.photos[0]) await ctx.replyWithPhoto(p.photos[0], { caption: photoCaption(profileSummary(p)), reply_markup: back }); else await ctx.reply(profileSummary(p), { reply_markup: back }); });
 composer.callbackQuery("profile:photos:manage", async (ctx) => { await ctx.answerCallbackQuery(); const p = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx))); if (!p) { await ctx.reply("Сначала создайте профиль."); return; } const rows = p.photos.map((_, i) => [inlineButton(i === 0 ? `Главное фото ${i + 1}` : `Сделать главным ${i + 1}`, `profile:photo:primary:${i}`), inlineButton(`Удалить ${i + 1}`, `profile:photo:delete:${i}`)]); await ctx.reply(`У вас ${p.photos.length} фото. Первое — главное.`, { reply_markup: inlineKeyboard([...rows, [inlineButton("Добавить фото", "profile:photo:add")], [inlineButton("⬅️ К профилю", "profile:manage")]]) }); });
 composer.callbackQuery("profile:photo:add", async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.step = "photos"; await ctx.reply("Пришлите фото. Можно добавить до 6 фотографий."); });
@@ -113,10 +113,17 @@ composer.callbackQuery("profile:delete:confirm", async (ctx) => {
   const store = new DomainStore(ctx);
   const p = await store.get<Profile>(profileKey(id));
   if (p) {
-    if (p.status && !["draft", "active", "hidden", "deleted"].includes(p.status)) p.userStatus = p.status;
+    if (p.status && !["draft", "active", "published", "hidden", "deleted"].includes(p.status)) p.userStatus = p.status;
     p.status = "hidden";
     p.accountStatus = "hidden";
     p.visibility = false;
+    p.active = false;
+    p.hidden = true;
+    p.deleted = false;
+    p.is_active = false;
+    p.is_hidden = true;
+    p.is_deleted = false;
+    p.is_test = false;
     p.isComplete = true;
     p.updatedAt = now();
     await store.set(profileKey(id), p);
