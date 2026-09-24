@@ -37,7 +37,10 @@ export interface Profile {
   /** Set when the user confirms publication. Older records are inferred below. */
   isComplete?: boolean;
   is_complete?: boolean;
-  status?: "draft" | "active" | "hidden" | "deleted";
+  /** User-written status badge, max 100 characters. */
+  status?: string | null;
+  /** Account lifecycle state; older records used status for this field. */
+  accountStatus?: "draft" | "active" | "hidden" | "deleted";
 }
 
 export type SearchGender = "m" | "f" | "other" | "any";
@@ -202,9 +205,9 @@ export function profileKey(id: number): string { return `profile:${id}`; }
  * the current registration wizard requires are present.
  */
 export function isProfileComplete(profile: Partial<Profile>): boolean {
-  if (profile.status === "deleted") return false;
-  if (profile.isComplete === true || profile.is_complete === true || profile.status === "active") return true;
-  if (profile.isComplete === false || profile.is_complete === false || profile.status === "draft") return false;
+  if (profileLifecycle(profile) === "deleted") return false;
+  if (profile.isComplete === true || profile.is_complete === true || profileLifecycle(profile) === "active") return true;
+  if (profile.isComplete === false || profile.is_complete === false || profileLifecycle(profile) === "draft") return false;
   return Boolean(
     profile.name?.trim() &&
     Number.isInteger(profile.age) && profile.age !== undefined && profile.age >= 18 &&
@@ -223,8 +226,25 @@ export function isProfileComplete(profile: Partial<Profile>): boolean {
 
 /** Only active, visible records may enter discovery or matching flows. */
 export function isDiscoverable(profile: Partial<Profile> | undefined): boolean {
-  if (!profile || profile.status === "deleted" || profile.status === "hidden") return false;
+  if (!profile || profileLifecycle(profile) === "deleted" || profileLifecycle(profile) === "hidden") return false;
   return profile.visibility === true;
+}
+
+/** Read lifecycle state across the pre-status and current profile formats. */
+export function profileLifecycle(profile: Partial<Profile>): "draft" | "active" | "hidden" | "deleted" | undefined {
+  if (profile.accountStatus) return profile.accountStatus;
+  if (profile.status === "draft" || profile.status === "active" || profile.status === "hidden" || profile.status === "deleted") {
+    return profile.status;
+  }
+  return undefined;
+}
+
+/** Return only the user-written badge text, excluding legacy lifecycle values. */
+export function profileStatus(profile: Partial<Profile>): string | null {
+  if (profile.status === undefined || profile.status === null) return null;
+  if (!profile.accountStatus && ["draft", "active", "hidden", "deleted"].includes(profile.status)) return null;
+  const value = profile.status.trim();
+  return value ? value.slice(0, 100) : null;
 }
 /** Durable username records let registration reserve a name before publishing. */
 export function telegramUsernameKey(id: number): string { return `telegram-username:${id}`; }
@@ -251,7 +271,9 @@ export function auditKey(id: string): string { return `admin-audit:${id}`; }
 export function profileSummary(p: Profile): string {
   const photoLine = p.photos.length > 1 ? `\n📷 Фото: ${p.photos.length}` : "";
   const nationalityLine = p.nationality ? `\n🌍 Национальность: ${p.nationality}` : "";
-  const text = `💛 ${p.name}, ${p.age}\n📍 ${p.city}\n💍 ${p.maritalStatus}${nationalityLine}\n💼 ${p.profession}\n📏 ${p.height} см${photoLine}\n\nО себе: ${p.bio}\n\nЦель знакомства: ${p.purpose}`;
+  const status = profileStatus(p);
+  const statusLine = status ? `\n\n💬 ${status}` : "";
+  const text = `💛 ${p.name}, ${p.age}${statusLine}\n📍 ${p.city}\n💍 ${p.maritalStatus}${nationalityLine}\n💼 ${p.profession}\n📏 ${p.height} см${photoLine}\n\nО себе: ${p.bio}\n\nЦель знакомства: ${p.purpose}`;
   return text.length <= 1000 ? text : `${text.slice(0, 997)}…`;
 }
 

@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, adminBlockedKey, canonicalMatchId, isDiscoverable, likeTo, likesKey, makeMatch, matchesKey, matchKey, now, profileKey, userId, type Like, type Match, type Profile } from "../domain.js";
+import { DomainStore, adminBlockedKey, canonicalMatchId, isDiscoverable, likeTo, likesKey, makeMatch, matchesKey, matchKey, now, profileKey, profileStatus, userId, type Like, type Match, type Profile } from "../domain.js";
 import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { notifyMutualMatch } from "../match-ui.js";
 import { mutualMessage } from "../match-ui.js";
@@ -29,7 +29,7 @@ composer.callbackQuery("likes:list", async (ctx) => {
     if (id === userId(ctx)) continue;
     const like = (await store.get<Like[]>(likesKey(id)) ?? []).find((x) => likeTo(x) === userId(ctx) && x.status === "pending");
     const profile = await store.get<Profile>(profileKey(id));
-    if (like && profile && isDiscoverable(profile) && !(await store.get(adminBlockedKey(id))) && !(await store.get(adminBlockedKey(userId(ctx))))) { await ctx.reply(`${profile.name}, ${profile.age} — ${profile.city}\n\nВам поставили лайк.`, { reply_markup: inlineKeyboard([[inlineButton("Ответить взаимностью", `likes:accept:${id}`), inlineButton("Не сейчас", `likes:ignore:${id}`)]]) }); return; }
+    if (like && profile && isDiscoverable(profile) && !(await store.get(adminBlockedKey(id))) && !(await store.get(adminBlockedKey(userId(ctx))))) { const status = profileStatus(profile); await ctx.reply(`${profile.name}, ${profile.age}${status ? `\n💬 ${status}` : ""} — ${profile.city}\n\nВам поставили лайк.`, { reply_markup: inlineKeyboard([[inlineButton("Ответить взаимностью", `likes:accept:${id}`), inlineButton("Не сейчас", `likes:ignore:${id}`)]]) }); return; }
   }
   await ctx.reply("Пока вас никто не лайкнул — загляните позже.", { reply_markup: inlineKeyboard([[inlineButton("⬅️ В меню", "menu:main")]]) });
 });

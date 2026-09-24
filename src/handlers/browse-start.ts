@@ -26,6 +26,7 @@ import {
   viewedKey,
   userId,
   photoCaption,
+  profileStatus,
   type Like,
   type Match,
   type Profile,
@@ -50,7 +51,9 @@ function actionKeyboard(target: number, includeReport = false) {
 }
 
 function cardText(profile: Profile): string {
-  return `${profile.name}, ${profile.age}\n📍 ${profile.city}\n\n${profile.bio}`;
+  const statusText = profileStatus(profile);
+  const status = statusText ? `\n\n💬 ${statusText}` : "";
+  return `${profile.name}, ${profile.age}${status}\n📍 ${profile.city}\n\n${profile.bio}`;
 }
 
 function fullProfileText(profile: Profile): string {
@@ -59,7 +62,9 @@ function fullProfileText(profile: Profile): string {
     profile.religionValues ? `Ценности: ${profile.religionValues}` : "",
     profile.smokingDrinking ? `Курение и алкоголь: ${profile.smokingDrinking}` : "",
   ].filter(Boolean);
-  return `${profile.name}, ${profile.age}\n📍 ${profile.city}\n\n` +
+  const statusText = profileStatus(profile);
+  const status = statusText ? `\n💬 ${statusText}` : "";
+  return `${profile.name}, ${profile.age}${status}\n📍 ${profile.city}\n\n` +
     `Семейный статус: ${profile.maritalStatus}\n` +
     (profile.nationality ? `Национальность: ${profile.nationality}\n` : "") +
     `Профессия: ${profile.profession}\n` +

@@ -28,7 +28,7 @@ composer.callbackQuery("settings:delete:yes", async (ctx) => {
     }
   }
   if (profile) {
-    profile.status = "deleted";
+    profile.accountStatus = "deleted";
     profile.visibility = false;
     profile.isComplete = true;
     profile.updatedAt = now();
