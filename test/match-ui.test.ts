@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contactArea, MUTUAL_MATCH_WITHOUT_TELEGRAM } from "../src/match-ui";
+import { contactArea, MUTUAL_MATCH_GREETING, MUTUAL_MATCH_WITHOUT_TELEGRAM } from "../src/match-ui";
 import type { Profile } from "../src/domain";
 
 const base: Profile = {
@@ -10,6 +10,10 @@ const base: Profile = {
 };
 
 describe("mutual match contact display", () => {
+  it("uses the exact additional mutual-match greeting", () => {
+    expect(MUTUAL_MATCH_GREETING).toBe("💕 У вас взаимная симпатия!\nЖелаем вам приятного общения, искренних разговоров и доброго знакомства. Пусть эта встреча станет началом чего-то прекрасного. 🤍");
+  });
+
   it("shows one confirmed opt-in Telegram link", () => {
     const view = contactArea({ ...base, telegramUsername: "anna_test", telegramUsernameConfirmed: true }, "1-2");
     expect(view.text).toContain("@anna_test");

@@ -4,6 +4,7 @@ import { inlineButton, inlineKeyboard, urlButton } from "./toolkit/index.js";
 
 export const MUTUAL_MATCH_TEXT = "💕 У вас взаимная симпатия!";
 export const MUTUAL_MATCH_WITHOUT_TELEGRAM = "💕 У вас взаимная симпатия! У пользователя не указан Telegram. Вы можете написать ему прямо здесь через бота.";
+export const MUTUAL_MATCH_GREETING = "💕 У вас взаимная симпатия!\nЖелаем вам приятного общения, искренних разговоров и доброго знакомства. Пусть эта встреча станет началом чего-то прекрасного. 🤍";
 
 /**
  * Contact details are deliberately derived from the profile being revealed,
@@ -39,5 +40,10 @@ export async function notifyMutualMatch(ctx: Ctx, recipient: number, matchedProf
   } catch {
     // A participant may have blocked or deleted the bot. The match remains
     // usable through the other participant's chat and internal messaging.
+  }
+  try {
+    await ctx.api.sendMessage(recipient, MUTUAL_MATCH_GREETING);
+  } catch {
+    // Keep notification delivery best-effort when a participant blocked the bot.
   }
 }
