@@ -299,9 +299,13 @@ export function photoCaption(value: string): string {
   // Telegram measures caption length in UTF-16 code units. Keep a margin for
   // platform-side normalization instead of sending the boundary value.
   const safeLimit = 900;
-  return value.length <= safeLimit
-    ? value
-    : `${value.slice(0, safeLimit - 1)}…`;
+  if (value.length <= safeLimit) return value;
+  // Leave the ellipsis inside the limit and avoid cutting a surrogate pair at
+  // the boundary. Telegram rejects the entire sendPhoto call when a caption is
+  // even one UTF-16 code unit too long.
+  let clipped = value.slice(0, safeLimit - 1);
+  if (clipped.length && clipped.charCodeAt(clipped.length - 1) >= 0xd800 && clipped.charCodeAt(clipped.length - 1) <= 0xdbff) clipped = clipped.slice(0, -1);
+  return `${clipped}…`;
 }
 
 export function profileIndexKey(): string { return "profiles:index"; }
