@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { getBotLinks } from "../bot-links.js";
+import { botStartLink, getBotLinks } from "../bot-links.js";
 import { inlineButton, inlineKeyboard, urlButton } from "../toolkit/index.js";
 
 // /help — plain-language explanation for non-technical users. This bot is
@@ -16,6 +16,7 @@ const HELP =
 const links = getBotLinks();
 const backToMenu = inlineKeyboard([
   ...(links ? [[urlButton("Открыть Telegram", links.telegram), urlButton("Открыть в браузере", links.web)]] : []),
+  [urlButton("🔗 Пригласить друга", botStartLink("ref123"))],
   [inlineButton("⬅️ В меню", "menu:main")],
 ]);
 

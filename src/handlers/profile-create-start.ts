@@ -2,6 +2,7 @@ import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import { DomainStore, isProfileComplete, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, profileLifecycle, profileRegistrationKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
+import { botStartLink } from "../bot-links.js";
 import { activeRegistrationBlock, blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit, registrationState } from "../content-policy.js";
 import { mainMenuFor } from "../main-menu.js";
 
@@ -253,7 +254,7 @@ composer.callbackQuery("profile:create:save", async (ctx) => {
     return;
   }
   await store.delete(profileRegistrationKey(profile.userId));
-  const admin = adminChatId(ctx); if (admin) { try { await ctx.api.sendMessage(admin, `Новая анкета: ${profile.name}, ${profile.age}, ${profile.city}`); } catch { /* delivery is best effort */ } }
+  const admin = adminChatId(ctx); if (admin) { try { await ctx.api.sendMessage(admin, `Новая анкета: ${profile.name}, ${profile.age}, ${profile.city}\nБот: ${botStartLink("ref123")}`); } catch { /* delivery is best effort */ } }
   ctx.session.step = "idle"; ctx.session.draft = undefined;
   await ctx.reply("Профиль сохранён и опубликован. Желаю вам добрых знакомств.", { reply_markup: await mainMenuFor(ctx) });
 });

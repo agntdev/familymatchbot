@@ -33,6 +33,7 @@ import {
 } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { notifyMutualMatch } from "../match-ui.js";
+import { botStartLink } from "../bot-links.js";
 
 registerMainMenuItem({ label: "Знакомства", data: "browse:start", order: 20 });
 const composer = new Composer<Ctx>();
@@ -311,7 +312,7 @@ composer.on("message:text", async (ctx, next) => {
   if (!reportIds.includes(id)) await store.set(reportsIndexKey(), [...reportIds, id]);
   const admin = adminChatId(ctx);
   if (admin) {
-    try { await ctx.api.sendMessage(admin, `Новая жалоба\nПричина: ${report.reason}\nПрофиль: ${profile.name}, ${profile.age}, ${profile.city}\nПодробности: ${report.details || "не указаны"}`); } catch { /* Owner delivery is best effort. */ }
+    try { await ctx.api.sendMessage(admin, `Новая жалоба\nПричина: ${report.reason}\nПрофиль: ${profile.name}, ${profile.age}, ${profile.city}\nПодробности: ${report.details || "не указаны"}\nБот: ${botStartLink("ref123")}`); } catch { /* Owner delivery is best effort. */ }
   }
   ctx.session.step = "idle";
   ctx.session.reportReason = undefined;

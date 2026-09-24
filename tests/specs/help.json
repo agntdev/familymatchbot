@@ -15,6 +15,7 @@
                     { "text": "Открыть Telegram", "url": "tg://resolve?domain=nikahzkvi" },
                     { "text": "Открыть в браузере", "url": "https://t.me/nikahzkvi" }
                   ],
+                  [{ "text": "🔗 Пригласить друга", "url": "https://t.me/nikahzkvi?start=ref123" }],
                   [{ "text": "⬅️ В меню", "callback_data": "menu:main" }]
                 ]
               }
