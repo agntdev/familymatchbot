@@ -78,6 +78,21 @@ export function createBot<S extends object>(
         throw error;
       }
     }) as Context["editMessageText"];
+    const safeEdit = async <T extends (...args: any[]) => Promise<any>>(method: T, args: Parameters<T>, fallback?: () => Promise<unknown>) => {
+      try { return await method(...args); }
+      catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/message is not modified|query is too old|there is no text in the message|message to edit/i.test(message)) {
+          if (/there is no text in the message|message to edit/i.test(message) && fallback) { try { return await fallback(); } catch { return true; } }
+          return true;
+        }
+        throw error;
+      }
+    };
+    const editCaption = ctx.editMessageCaption.bind(ctx);
+    ctx.editMessageCaption = ((...args: Parameters<Context["editMessageCaption"]>) => safeEdit(editCaption, args)) as Context["editMessageCaption"];
+    const editMedia = ctx.editMessageMedia.bind(ctx);
+    ctx.editMessageMedia = ((...args: Parameters<Context["editMessageMedia"]>) => safeEdit(editMedia, args)) as Context["editMessageMedia"];
     await next();
   });
   bot.use(

@@ -16,6 +16,8 @@ export interface PolicyDecision {
   ruleId?: string;
   matchedText?: string;
   message?: string;
+  confidenceScore: number;
+  submittedText?: string;
 }
 
 export interface RegistrationBlockEvent {
@@ -27,6 +29,7 @@ export interface RegistrationBlockEvent {
   block_start: number;
   block_end: number | null;
   attempts: number;
+  duration_minutes: number;
 }
 
 export interface RegistrationState {
@@ -42,7 +45,7 @@ const auditKey = (id: string) => `registration-policy-audit:${id}`;
 const auditIndexKey = () => "registration-policy-audit:index";
 
 const rules: Array<{ category: ViolationCategory; id: string; expression: RegExp }> = [
-  { category: "profanity/insults", id: "profanity-ru", expression: /(?:еб|бля|бляд|сука|хуй|пизд|мудак|идиот|дебил|тупиц)/iu },
+  { category: "profanity/insults", id: "profanity-ru", expression: /(?<![\p{L}])(?:еб(?:ать|ан|лан|ло)|блядь|блядина|сука|хуй(?:ня|ло)?|пизд(?:а|ец|ёж)|мудак|идиот|дебил|тупиц(?:а|ы))(?![\p{L}])/iu },
   { category: "spam/advertising", id: "spam-link", expression: /(?:https?:\/\/|www\.|t\.me\/|\.com\b|\.ru\b)/iu },
   { category: "spam/advertising", id: "spam-phone", expression: /(?:\+?\d[\d ()-]{8,}\d)/u },
   { category: "spam/advertising", id: "spam-payment", expression: /(?:переведите|оплатите|скидк|заработок|инвестиц|реклама|продам|купите|крипт)/iu },
@@ -54,6 +57,12 @@ const rules: Array<{ category: ViolationCategory; id: string; expression: RegExp
 
 function normalize(value: string): string { return value.replace(/\s+/gu, " ").trim(); }
 
+export function wordCount(value: string): number {
+  return normalize(value).split(" ")
+    .map((word) => word.replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, ""))
+    .filter(Boolean).length;
+}
+
 /** Conservative checks: uncertain or merely short text is returned as a suggestion. */
 export function inspectProfileText(fields: Record<string, string | null | undefined>): PolicyDecision {
   for (const [field, raw] of Object.entries(fields)) {
@@ -62,15 +71,15 @@ export function inspectProfileText(fields: Record<string, string | null | undefi
     for (const rule of rules) {
       const match = value.match(rule.expression);
       if (match) {
-        return { kind: "explicit", category: rule.category, ruleId: rule.id, matchedText: `${field}: ${match[0].slice(0, 80)}` };
+        return { kind: "explicit", category: rule.category, ruleId: rule.id, matchedText: `${field}: ${match[0].slice(0, 80)}`, confidenceScore: 0.99, submittedText: value };
       }
     }
   }
   const bio = normalize(fields.bio ?? "");
-  if (bio.length > 0 && bio.length < 8) {
-    return { kind: "suggestion", message: "Расскажите о себе чуть подробнее — хотя бы несколькими словами." };
+  if (/(?<![\p{L}])(?:бля|сук|еб)(?![\p{L}])/iu.test(bio)) {
+    return { kind: "suggestion", message: "Мы обнаружили возможное нарушение в тексте. Пожалуйста, отредактируйте анкету, чтобы она соответствовала правилам (без оскорблений, рекламы, спама и т.п.).", confidenceScore: 0.55, submittedText: bio };
   }
-  return { kind: "allowed" };
+  return { kind: "allowed", confidenceScore: 0.98, submittedText: bio };
 }
 
 export async function registrationState(ctx: Ctx): Promise<RegistrationState> {
@@ -95,13 +104,20 @@ function unblockText(end: number | null): string {
 export function blockMessage(event: RegistrationBlockEvent): string {
   return event.block_type === "permanent"
     ? `Создание анкет для вас заблокировано навсегда. Причина: ${event.detected_reason.category}.`
-    : `Анкета заблокирована на 1 час. Причина: ${event.detected_reason.category}. Вы сможете снова создать её после ${unblockText(event.block_end)} (UTC).`;
+    : `Профиль не создан: обнаружено нарушение правил: ${event.detected_reason.category}. Временная блокировка до ${formatBlockEnd(event.block_end)} (10 минут).`;
+}
+
+function formatBlockEnd(end: number | null): string {
+  if (end === null) return "навсегда";
+  const parts = new Intl.DateTimeFormat("ru-RU", { timeZone: "UTC", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }).formatToParts(new Date(end));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("hour")}:${get("minute")}, ${get("day")}.${get("month")}.${get("year")}`;
 }
 
 export async function recordPolicyAudit(ctx: Ctx, action: string, decision: PolicyDecision): Promise<void> {
   const id = `${now()}-${ctx.from?.id ?? 0}-${action}`;
   const store = new DomainStore(ctx);
-  await store.set(auditKey(id), { id, userId: ctx.from?.id ?? 0, action, decision, at: now() });
+  await store.set(auditKey(id), { id, userId: ctx.from?.id ?? 0, action, submittedText: decision.submittedText ?? "", detectedReason: decision.category ?? null, confidenceScore: decision.confidenceScore, decision, at: now(), timestamp_utc: now() });
   const ids = await store.get<string[]>(auditIndexKey()) ?? [];
   if (!ids.includes(id)) await store.set(auditIndexKey(), [...ids, id]);
 }
@@ -121,8 +137,9 @@ export async function enforceViolation(ctx: Ctx, decision: PolicyDecision): Prom
     detected_reason: { category: decision.category!, rule_id: decision.ruleId!, matched_text: decision.matchedText! },
     block_type: permanent ? "permanent" : "temporary",
     block_start: start,
-    block_end: permanent ? null : start + 60 * 60 * 1000,
+    block_end: permanent ? null : start + 10 * 60 * 1000,
     attempts: history.length + 1,
+    duration_minutes: permanent ? 0 : 10,
   };
   await store.set(activeBlockKey(id), event);
   await store.set(historyKey(id), [...history, event]);
