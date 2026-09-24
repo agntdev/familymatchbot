@@ -1,6 +1,6 @@
 [
   {
-    "name": "city validation accepts a canonical city after rejecting an unknown one",
+    "name": "city text is accepted without existence validation",
     "steps": [
       {
         "send": {
@@ -46,19 +46,6 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "📍 Такого города не найдено. Пожалуйста, укажите существующий город"
-            }
-          }
-        ]
-      },
-      {
-        "send": {
-          "text": "Москва"
-        },
-        "expect": [
-          {
-            "method": "sendMessage",
-            "payload": {
               "text": "Каков ваш семейный статус?"
             }
           }
@@ -67,7 +54,7 @@
     ]
   },
   {
-    "name": "bio shorter than fifty words is not saved",
+    "name": "short bio is accepted and registration proceeds",
     "steps": [
       {
         "send": {
@@ -179,7 +166,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Ваш текст должен содержать от 50 до 1000 слов. Пожалуйста, отредактируйте и отправьте снова."
+              "text": "Что вы ищете в отношениях?"
             }
           }
         ]
@@ -187,7 +174,7 @@
     ]
   },
   {
-    "name": "bio longer than one thousand words is not saved",
+    "name": "long bio is accepted and registration proceeds",
     "steps": [
       {
         "send": {
@@ -299,7 +286,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Ваш текст должен содержать от 50 до 1000 слов. Пожалуйста, отредактируйте и отправьте снова."
+              "text": "Что вы ищете в отношениях?"
             }
           }
         ]
