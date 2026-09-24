@@ -219,6 +219,7 @@ async function createMatch(ctx: Ctx, target: number): Promise<Match | undefined>
 }
 
 composer.callbackQuery("browse:start", async (ctx) => { await ctx.answerCallbackQuery(); await browseProfiles(ctx); });
+composer.callbackQuery("menu:watch_profiles", async (ctx) => { await ctx.answerCallbackQuery(); await browseProfiles(ctx); });
 
 composer.callbackQuery(/^browse:(like|pass):(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();

@@ -9,7 +9,7 @@ import { mainMenuFor } from "../main-menu.js";
 // file to add a feature. Send ONE message — no placeholder line above the menu.
 const composer = new Composer<Ctx>();
 
-const WELCOME = "👋 Добро пожаловать в «Никах» — здесь знакомятся для серьёзных отношений и создания семьи. Выберите, с чего начнём.";
+const WELCOME = "Найди человека, с которым захочется создать семью 🤍\nЗнакомства для серьёзных отношений и создания семьи";
 
 composer.command("start", async (ctx) => {
   ctx.session.step = "idle";
@@ -17,7 +17,7 @@ composer.command("start", async (ctx) => {
   ctx.session.searchDraft = undefined;
   ctx.session.editField = undefined;
   ctx.session.activeMatchId = undefined;
-  await ctx.reply(WELCOME, { reply_markup: await mainMenuFor(ctx) });
+  await ctx.reply(WELCOME, { reply_markup: mainMenuFor() });
 });
 
 // "Back to menu" — re-render the main menu in place from any sub-view.
@@ -27,9 +27,9 @@ composer.callbackQuery("menu:main", async (ctx) => {
   // photo into text, so render a fresh menu for media messages and keep the
   // quieter in-place navigation for ordinary text messages.
   if (ctx.callbackQuery.message?.text !== undefined) {
-    await ctx.editMessageText(WELCOME, { reply_markup: await mainMenuFor(ctx) });
+    await ctx.editMessageText(WELCOME, { reply_markup: mainMenuFor() });
   } else {
-    await ctx.reply(WELCOME, { reply_markup: await mainMenuFor(ctx) });
+    await ctx.reply(WELCOME, { reply_markup: mainMenuFor() });
   }
 });
 

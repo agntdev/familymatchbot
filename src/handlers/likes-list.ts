@@ -7,7 +7,7 @@ import { mutualMessage } from "../match-ui.js";
 registerMainMenuItem({ label: "Вам понравились", data: "likes:list", order: 40 });
 const composer = new Composer<Ctx>();
 
-composer.callbackQuery("likes:list", async (ctx) => {
+async function showLikes(ctx: Ctx): Promise<void> {
   await ctx.answerCallbackQuery();
   const store = new DomainStore(ctx);
   const mutualIds = await store.get<string[]>(matchesKey(userId(ctx))) ?? [];
@@ -32,7 +32,10 @@ composer.callbackQuery("likes:list", async (ctx) => {
     if (like && profile && isDiscoverable(profile) && !(await store.get(adminBlockedKey(id))) && !(await store.get(adminBlockedKey(userId(ctx))))) { const status = profileStatus(profile); await ctx.reply(`${profile.name}, ${profile.age}${status ? `\n💬 ${status}` : ""} — ${profile.city}\n\nВам поставили лайк.`, { reply_markup: inlineKeyboard([[inlineButton("Ответить взаимностью", `likes:accept:${id}`), inlineButton("Не сейчас", `likes:ignore:${id}`)]]) }); return; }
   }
   await ctx.reply("Пока вас никто не лайкнул — загляните позже.", { reply_markup: inlineKeyboard([[inlineButton("⬅️ В меню", "menu:main")]]) });
-});
+}
+
+composer.callbackQuery("likes:list", async (ctx) => { await ctx.answerCallbackQuery(); await showLikes(ctx); });
+composer.callbackQuery("menu:mutual_likes", async (ctx) => { await ctx.answerCallbackQuery(); await showLikes(ctx); });
 
 composer.callbackQuery(/^likes:(accept|ignore):(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery(); const action = ctx.match[1]; const target = Number(ctx.match[2]); const me = userId(ctx); const store = new DomainStore(ctx);
