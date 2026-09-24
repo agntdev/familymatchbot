@@ -70,6 +70,11 @@ composer.callbackQuery("search:open", async (ctx) => {
   await showSearch(ctx);
 });
 
+composer.callbackQuery("menu:search", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await showSearch(ctx);
+});
+
 composer.callbackQuery("browse:search", async (ctx) => {
   await ctx.answerCallbackQuery();
   await showSearch(ctx);

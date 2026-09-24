@@ -1,4 +1,4 @@
-[
+    [
   {
     "name": "/start replies with the welcome + main menu",
     "steps": [
@@ -8,27 +8,49 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "👋 Добро пожаловать в «Никах» — здесь знакомятся для серьёзных отношений и создания семьи. Выберите, с чего начнём.",
+              "text": "Найди человека, с которым захочется создать семью 🤍\nЗнакомства для серьёзных отношений и создания семьи",
               "reply_markup": {
                 "inline_keyboard": [
                   [
-                    { "text": "📝 Создать анкету", "callback_data": "profile:create:start" },
-                    { "text": "Знакомства", "callback_data": "browse:start" }
+                    { "text": "💚 Смотреть анкеты", "callback_data": "menu:watch_profiles" },
+                    { "text": "👤 Моя анкета", "callback_data": "menu:my_profile" }
                   ],
                   [
-                    { "text": "🔎 Изменить поиск", "callback_data": "search:open" },
-                    { "text": "Вам понравились", "callback_data": "likes:list" }
+                    { "text": "❤️ Взаимные симпатии", "callback_data": "menu:mutual_likes" },
+                    { "text": "🔎 Поиск", "callback_data": "menu:search" }
                   ],
                   [
-                    { "text": "Сообщения", "callback_data": "conversations:list" },
-                    { "text": "Особые возможности", "callback_data": "vip:open" }
-                  ],
-                  [
-                    { "text": "Настройки", "callback_data": "settings:open" }
-                  ],
-                  [
-                    { "text": "❓ Помощь", "callback_data": "menu:help" }
+                    { "text": "⚙️ Настройки", "callback_data": "menu:settings" }
                   ]
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "deep-link and repeat starts keep the same minimal menu",
+    "steps": [
+      {
+        "send": { "text": "/start welcome" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": {
+              "text": "Найди человека, с которым захочется создать семью 🤍\nЗнакомства для серьёзных отношений и создания семьи",
+              "reply_markup": {
+                "inline_keyboard": [
+                  [
+                    { "text": "💚 Смотреть анкеты", "callback_data": "menu:watch_profiles" },
+                    { "text": "👤 Моя анкета", "callback_data": "menu:my_profile" }
+                  ],
+                  [
+                    { "text": "❤️ Взаимные симпатии", "callback_data": "menu:mutual_likes" },
+                    { "text": "🔎 Поиск", "callback_data": "menu:search" }
+                  ],
+                  [{ "text": "⚙️ Настройки", "callback_data": "menu:settings" }]
                 ]
               }
             }

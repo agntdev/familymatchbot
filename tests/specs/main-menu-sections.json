@@ -1,0 +1,27 @@
+[
+  {
+    "name": "main menu buttons open their sections",
+    "steps": [
+      {
+        "send": { "callback": "menu:watch_profiles" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Новых анкет пока нет" } }]
+      },
+      {
+        "send": { "callback": "menu:my_profile" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "У вас пока нет профиля — создайте его за несколько минут." } }]
+      },
+      {
+        "send": { "callback": "menu:mutual_likes" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Пока вас никто не лайкнул — загляните позже." } }]
+      },
+      {
+        "send": { "callback": "menu:search" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Настроим поиск подходящих анкет.\n\nВыберите пол человека, которого хотите встретить." } }]
+      },
+      {
+        "send": { "callback": "menu:settings" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Настройте видимость профиля и удалите данные, когда захотите." } }]
+      }
+    ]
+  }
+]
