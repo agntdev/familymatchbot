@@ -9,6 +9,7 @@ const composer = new Composer<Ctx>();
 const force = (placeholder: string) => ({ force_reply: true as const, input_field_placeholder: placeholder });
 const menu = inlineKeyboard([[inlineButton("⬅️ В меню", "menu:main")]]);
 const RULES_TEXT = "Правила «Никах»\n\nЗапрещены оскорбления и нецензурная лексика, спам, мошенничество, реклама, непристойный контент, ложные данные и бессмысленные или шуточные анкеты.\n\nПожалуйста, уважайте других участников и заполняйте анкету честно.";
+const TELEGRAM_PRIVACY_NOTICE = "🔒 До взаимной симпатии ваш Telegram не видят другие пользователи. Он станет доступен только после взаимной симпатии.";
 const rulesKeyboard = () => choose([[inlineButton("✅ Я ознакомлен(а) и согласен(на) с правилами", "profile:rules:accept")]]);
 
 type Draft = NonNullable<Ctx["session"]["draft"]>;
@@ -47,7 +48,7 @@ composer.callbackQuery("profile:create:start", async (ctx) => {
   if (blocked) { await ctx.reply(blockMessage(blocked), { reply_markup: menu }); return; }
   const existing = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx)));
   if (existing) { await ctx.reply("У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: inlineKeyboard([[inlineButton("Мой профиль", "profile:manage")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; }
-  ctx.session.draft = { photos: [] }; begin(ctx, "rules");
+  ctx.session.draft = { photos: [] }; ctx.session.telegramPrivacyNoticeShown = false; begin(ctx, "rules");
   await ctx.reply(RULES_TEXT, { reply_markup: rulesKeyboard() });
 });
 composer.callbackQuery("profile:rules:accept", async (ctx) => { await ctx.answerCallbackQuery(); draft(ctx).rulesAccepted = true; begin(ctx, "consent"); await ctx.reply("Серьёзные отношения начинаются с уважения. Вы ищете партнёра для серьёзных отношений и семьи?", { reply_markup: choose([[inlineButton("Да, ищу", "profile:consent:yes"), inlineButton("Пока нет", "profile:consent:no")]]) }); });
@@ -62,7 +63,7 @@ composer.on("message:text", async (ctx, next) => {
   if (ctx.session.step === "nationality" || ctx.session.step === "nationality_manual") { if (text.length < 1 || text.length > 100) { await ctx.reply("Укажите национальность не длиннее 100 символов.", { reply_markup: force("Введите национальность") }); return; } d.nationality = text; begin(ctx, "profession"); await ctx.reply("Чем вы занимаетесь?", { reply_markup: force("Напишите профессию") }); return; }
   if (["profession", "about", "purpose"].includes(ctx.session.step ?? "")) { const step = ctx.session.step; if (step === "profession") { if (text.length < 2 || text.length > 500) { await ctx.reply("Ответ должен быть от 2 до 500 символов. Попробуйте ещё раз.", { reply_markup: force("Введите ответ") }); return; } d.profession = text; } if (step === "about") { const decision = inspectProfileText({ bio: text }); await recordPolicyAudit(ctx, decision.kind === "allowed" ? "bio-accepted" : "bio-review", decision); if (decision.kind === "suggestion") { await ctx.reply(decision.message!, { reply_markup: force("Расскажите о себе") }); return; } if (decision.kind === "explicit") { const event = await enforceViolation(ctx, decision); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.reply(blockMessage(event!), { reply_markup: menu }); return; } d.bio = text; } if (step === "purpose") { if (text.length < 2 || text.length > 500) { await ctx.reply("Ответ должен быть от 2 до 500 символов. Попробуйте ещё раз.", { reply_markup: force("Введите ответ") }); return; } d.purpose = text; } const nextStep = step === "profession" ? "height" : step === "about" ? "purpose" : "telegram"; begin(ctx, nextStep); if (nextStep === "height") await ctx.reply("Какой у вас рост в сантиметрах?", { reply_markup: force("Например, 170") }); else if (nextStep === "purpose") await ctx.reply("Что вы ищете в отношениях?", { reply_markup: force("Напишите коротко о цели") }); else await askTelegram(ctx); return; }
   if (ctx.session.step === "height") { const height = Number(text); if (!Number.isInteger(height) || height < 120 || height > 230) { await ctx.reply("Укажите рост от 120 до 230 сантиметров.", { reply_markup: force("Например, 170") }); return; } d.height = height; begin(ctx, "about"); await ctx.reply("📝 Расскажите о себе", { reply_markup: force("Напишите о себе") }); return; }
-  if (ctx.session.step === "telegram_manual") {
+  if (ctx.session.step === "telegram_manual" && ctx.session.editField !== "telegram") {
     if (text === "Пропустить") { d.telegramUsername = null; await showPreview(ctx); return; }
     const username = normalizeTelegramUsername(text);
     if (!username) { await ctx.reply("Некорректный username. Используйте @ и от 5 до 32 латинских букв, цифр или _.", { reply_markup: force("@username") }); return; }
@@ -102,6 +103,10 @@ composer.callbackQuery("profile:nationality:other", async (ctx) => { await ctx.a
 composer.callbackQuery("profile:nationality:manual", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "nationality_manual"); await ctx.reply("Напишите вашу национальность — до 100 символов.", { reply_markup: force("Введите национальность") }); });
 
 async function askTelegram(ctx: Ctx): Promise<void> {
+  if (!ctx.session.telegramPrivacyNoticeShown) {
+    ctx.session.telegramPrivacyNoticeShown = true;
+    await ctx.reply(TELEGRAM_PRIVACY_NOTICE);
+  }
   const store = new DomainStore(ctx);
   const savedUsername = await store.get<string | null>(telegramUsernameKey(userId(ctx)));
   if (savedUsername) {
@@ -156,7 +161,7 @@ composer.callbackQuery("profile:telegram:confirm", async (ctx) => {
   draft(ctx).usernameConfirmed = true;
   await showPreview(ctx);
 });
-composer.callbackQuery("profile:telegram:change", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "telegram_manual"); await ctx.reply(telegramPrompt, { reply_markup: force("@username") }); });
+composer.callbackQuery("profile:telegram:change", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "telegram_manual"); if (!ctx.session.telegramPrivacyNoticeShown) { ctx.session.telegramPrivacyNoticeShown = true; await ctx.reply(TELEGRAM_PRIVACY_NOTICE); } await ctx.reply(telegramPrompt, { reply_markup: force("@username") }); });
 
 composer.on("message:photo", async (ctx, next) => {
   if (ctx.session.step !== "photos" || !ctx.session.draft) { await next(); return; }

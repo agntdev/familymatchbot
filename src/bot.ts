@@ -11,6 +11,7 @@ export interface Session {
   activeMatchId?: string;
   activeTargetId?: number;
   lastMessageAt?: number;
+  telegramPrivacyNoticeShown?: boolean;
   reportReason?: string;
   expiresAt?: number;
   editField?: string;
