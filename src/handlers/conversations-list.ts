@@ -67,7 +67,11 @@ async function openChat(ctx: Ctx, id: string): Promise<void> {
   const profile = await store.get<Profile>(profileKey(other));
   if (!profile) { await ctx.reply("Профиль собеседника больше недоступен.", { reply_markup: back }); return; }
   const key = match.match_id ?? match.id ?? id;
-  const messages = await store.get<Message[]>(messagesKey(key)) ?? [];
+  const storedMessages = await store.get<Message[]>(messagesKey(key));
+  // Opening the match creates the private thread's durable record when it does
+  // not exist yet. The match itself remains the authorization boundary.
+  const messages = storedMessages ?? [];
+  if (!storedMessages) await store.set(messagesKey(key), messages);
   const stamp = now();
   let changed = false;
   for (const message of messages) {

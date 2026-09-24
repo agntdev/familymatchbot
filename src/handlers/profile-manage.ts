@@ -64,7 +64,8 @@ async function saveTelegramEdit(ctx: Ctx): Promise<void> {
     const previousOwnerKey = telegramUsernameOwnerKey(previousValue);
     if (await store.get<number>(previousOwnerKey) === userId(ctx)) await store.delete(previousOwnerKey);
   }
-  const p = withTelegramDefaults(stored); p.telegramUsername = value; p.telegram_username = value; p.updatedAt = now();
+  const confirmed = value !== null;
+  const p = withTelegramDefaults(stored); p.telegramUsername = value; p.telegramUsernameConfirmed = confirmed; p.telegram_username = value; p.telegram_username_confirmed = confirmed; p.updatedAt = now();
   try { if (!(await store.set(profileKey(p.userId), p))) throw new Error("storage"); } catch { await ctx.reply("Ошибка: не удалось сохранить Telegram. Попробуйте ещё раз."); return; }
   ctx.session.step = "idle"; ctx.session.editField = undefined; ctx.session.draft = undefined;
   await ctx.reply(value ? `📱 Telegram: @${value}` : "📱 Telegram: не указан", { reply_markup: inlineKeyboard([[inlineButton("Мой профиль", "profile:manage")]]) });

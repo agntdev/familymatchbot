@@ -45,5 +45,21 @@
         ]
       }
     ]
+  },
+  {
+    "name": "Private messaging stays behind a mutual match",
+    "steps": [
+      {
+        "send": { "callback": "conversation:open:42-99" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": {
+              "text": "Этот разговор больше недоступен — взаимная симпатия прекращена или пользователь заблокирован."
+            }
+          }
+        ]
+      }
+    ]
   }
 ]
