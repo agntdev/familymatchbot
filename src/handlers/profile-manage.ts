@@ -1,6 +1,7 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, deactivateProfileRelationships, matchesKey, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, profileLifecycle, telegramUsernameKey, telegramUsernameOwnerKey, userId, profileSummary, validTelegramUsername, withTelegramDefaults, type Profile } from "../domain.js";
+import { DomainStore, deactivateProfileRelationships, isProfileComplete, matchesKey, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, profileLifecycle, profileRegistrationKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, profileSummary, validTelegramUsername, withTelegramDefaults, type Profile } from "../domain.js";
+import { continueRegistration } from "./profile-create-start.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit } from "../content-policy.js";
 
@@ -12,7 +13,31 @@ const force = (placeholder: string) => ({ force_reply: true as const, input_fiel
 const TELEGRAM_PRIVACY_NOTICE = "🔒 До взаимной симпатии ваш Telegram не видят другие пользователи. Он станет доступен только после взаимной симпатии.";
 const fields = inlineKeyboard([[inlineButton("Имя", "profile:edit:name"), inlineButton("Возраст", "profile:edit:age")], [inlineButton("Город", "profile:edit:city"), inlineButton("Семейный статус", "profile:edit:maritalStatus")], [inlineButton("Национальность", "profile:edit:nationality"), inlineButton("Профессия", "profile:edit:profession")], [inlineButton("Рост", "profile:edit:height"), inlineButton("О себе", "profile:edit:bio")], [inlineButton("Цель знакомства", "profile:edit:purpose")], [inlineButton("💬 Мой статус", "profile:edit:status")], [inlineButton("Telegram", "profile:edit:telegram")], [inlineButton("⬅️ Назад", "profile:manage")]]);
 function manageKeyboard(p: Profile) { const profile = withTelegramDefaults(p); return inlineKeyboard([[inlineButton("Изменить поле", "profile:edit:fields")], [inlineButton("Управление фото", "profile:photos:manage")], [inlineButton(`Показывать мой Telegram при взаимной симпатии: ${profile.showTelegramOnMatch ? "Да" : "Нет"}`, "profile:telegram:toggle")], [inlineButton(profile.visibility ? "Скрыть профиль" : "Показать профиль", "profile:visibility:toggle")], [inlineButton("Предпросмотр", "profile:preview"), inlineButton("Удалить профиль", "profile:delete")], [inlineButton("⬅️ В меню", "menu:main")]]); }
-async function show(ctx: Ctx): Promise<void> { const stored = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx))); if (!stored) { await ctx.reply("У вас пока нет профиля — создайте его за несколько минут.", { reply_markup: inlineKeyboard([[inlineButton("Создать профиль", "profile:create:start")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; } if (profileLifecycle(stored) === "deleted") { await ctx.reply("Анкета сохранена, но сейчас скрыта.", { reply_markup: inlineKeyboard([[inlineButton("♻️ Восстановить анкету", "profile:restore")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; } const p = withTelegramDefaults(stored); await ctx.reply(profileSummary(p), { reply_markup: manageKeyboard(p) }); }
+async function show(ctx: Ctx): Promise<void> {
+  const store = new DomainStore(ctx);
+  const stored = await store.get<Profile>(profileKey(userId(ctx)));
+  if (!stored) {
+    const checkpoint = await store.get<{ draft: NonNullable<Ctx["session"]["draft"]>; step?: Ctx["session"]["step"] }>(profileRegistrationKey(userId(ctx)));
+    const draft = checkpoint?.draft?.rulesAccepted ? checkpoint.draft : ctx.session.draft?.rulesAccepted ? ctx.session.draft : undefined;
+    if (draft) {
+      ctx.session.draft = draft;
+      ctx.session.step = checkpoint?.step ?? ctx.session.step ?? "consent";
+      await continueRegistration(ctx);
+      return;
+    }
+    await ctx.reply("У вас пока нет профиля — создайте его за несколько минут.", { reply_markup: inlineKeyboard([[inlineButton("Создать профиль", "profile:create:start")], [inlineButton("⬅️ В меню", "menu:main")]]) });
+    return;
+  }
+  if (profileLifecycle(stored) === "deleted" || profileLifecycle(stored) === "hidden") { await ctx.reply("Анкета сохранена, но сейчас скрыта.", { reply_markup: inlineKeyboard([[inlineButton("♻️ Восстановить анкету", "profile:restore")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; }
+  if (!isProfileComplete(stored)) {
+    if (stored.rulesAccepted || stored.rules_accepted) { ctx.session.draft ??= { photos: stored.photos ?? [], rulesAccepted: true }; ctx.session.step ??= "consent"; await continueRegistration(ctx); return; }
+    await ctx.reply("Профиль ещё не заполнен. Откройте создание профиля, чтобы продолжить.", { reply_markup: inlineKeyboard([[inlineButton("Продолжить заполнение", "profile:create:start")], [inlineButton("⬅️ В меню", "menu:main")]]) });
+    return;
+  }
+  const p = withTelegramDefaults(stored);
+  if (p.photos[0]) await ctx.replyWithPhoto(p.photos[0], { caption: photoCaption(profileSummary(p)), reply_markup: manageKeyboard(p) });
+  else await ctx.reply(profileSummary(p), { reply_markup: manageKeyboard(p) });
+}
 composer.callbackQuery("profile:manage", async (ctx) => { await ctx.answerCallbackQuery(); await show(ctx); });
 composer.callbackQuery("profile:edit:fields", async (ctx) => { await ctx.answerCallbackQuery(); await ctx.editMessageText("Что хотите изменить?", { reply_markup: fields }); });
 composer.callbackQuery("profile:edit:maritalStatus", async (ctx) => { await ctx.answerCallbackQuery(); await ctx.reply("Выберите семейный статус.", { reply_markup: inlineKeyboard([[inlineButton("Не был(а) в браке", "profile:marital:set:single")], [inlineButton("В отношениях", "profile:marital:set:relationship")], [inlineButton("Разведён(а)", "profile:marital:set:divorced")], [inlineButton("Вдовец или вдова", "profile:marital:set:widowed")]]) }); });

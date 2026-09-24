@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, profileLifecycle, telegramUsernameKey, telegramUsernameOwnerKey, userId, type Profile } from "../domain.js";
+import { DomainStore, isProfileComplete, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, profileLifecycle, profileRegistrationKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { activeRegistrationBlock, blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit, registrationState } from "../content-policy.js";
 import { mainMenuFor } from "../main-menu.js";
@@ -14,7 +14,8 @@ const RULES_TEXT = "Правила «Никах»\n\nЗапрещены оско
 const TELEGRAM_PRIVACY_NOTICE = "🔒 До взаимной симпатии ваш Telegram не видят другие пользователи. Он станет доступен только после взаимной симпатии.";
 const rulesKeyboard = () => choose([[inlineButton("✅ Я ознакомлен(а) и согласен(на) с правилами", "profile:rules:accept")]]);
 
-type Draft = NonNullable<Ctx["session"]["draft"]>;
+export type Draft = NonNullable<Ctx["session"]["draft"]>;
+type RegistrationCheckpoint = { draft: Draft; step?: Ctx["session"]["step"] };
 function draft(ctx: Ctx): Draft { return (ctx.session.draft ??= { photos: [] }); }
 function choose(rows: ReturnType<typeof inlineButton>[][]): ReturnType<typeof inlineKeyboard> { return inlineKeyboard(rows); }
 function previewText(d: Draft): string {
@@ -26,6 +27,26 @@ function previewKeyboard(): ReturnType<typeof inlineKeyboard> {
   return choose([[inlineButton("Сохранить", "profile:create:save"), inlineButton("Изменить", "profile:create:edit")], [inlineButton("Отменить", "profile:create:cancel")]]);
 }
 function begin(ctx: Ctx, step: Ctx["session"]["step"]): void { ctx.session.step = step; ctx.session.expiresAt = now() + 15 * 60_000; }
+async function saveRegistrationCheckpoint(ctx: Ctx): Promise<void> {
+  const d = ctx.session.draft;
+  if (!d?.rulesAccepted) return;
+  await new DomainStore(ctx).set(profileRegistrationKey(userId(ctx)), { draft: d, step: ctx.session.step } satisfies RegistrationCheckpoint);
+}
+/** Resume the current registration step without displaying the rules again. */
+export async function continueRegistration(ctx: Ctx): Promise<void> {
+  const step = ctx.session.step;
+  if (step === "consent") {
+    await ctx.reply("Серьёзные отношения начинаются с уважения. Вы ищете партнёра для серьёзных отношений и семьи?", { reply_markup: choose([[inlineButton("Да, ищу", "profile:consent:yes"), inlineButton("Пока нет", "profile:consent:no")]]) });
+  } else if (step === "name") {
+    await ctx.reply("Как вас зовут?", { reply_markup: force("Введите имя") });
+  } else if (step === "age") {
+    await ctx.reply("Сколько вам лет? Нужен возраст от 18 до 99 лет.", { reply_markup: force("Введите возраст") });
+  } else if (step === "photos") {
+    await ctx.reply("Пришлите от 1 до 6 фотографий. Можно отправлять их по одной.");
+  } else {
+    await ctx.reply("Продолжим заполнение анкеты. Выберите следующий шаг кнопками ниже.", { reply_markup: inlineKeyboard([[inlineButton("Открыть анкету", "profile:create:start")], [inlineButton("⬅️ В меню", "menu:main")]]) });
+  }
+}
 const telegramPrompt = "Пожалуйста, укажите ваш Telegram username в формате @username";
 const skipKeyboard = { keyboard: [[{ text: "Пропустить" }]], resize_keyboard: true, one_time_keyboard: true };
 
@@ -50,16 +71,30 @@ composer.callbackQuery("profile:create:start", async (ctx) => {
   if (blocked) { await ctx.reply(blockMessage(blocked), { reply_markup: await mainMenuFor(ctx) }); return; }
   const existing = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx)));
   if (existing) {
+    if (profileLifecycle(existing) !== "deleted" && !isProfileComplete(existing) && (existing.rulesAccepted || existing.rules_accepted)) {
+      ctx.session.draft ??= { photos: existing.photos ?? [], rulesAccepted: true };
+      ctx.session.step ??= "consent";
+      await continueRegistration(ctx);
+      return;
+    }
     const action = profileLifecycle(existing) === "deleted"
       ? inlineButton("♻️ Восстановить анкету", "profile:restore")
       : inlineButton("Мой профиль", "profile:manage");
     await ctx.reply(profileLifecycle(existing) === "deleted" ? "Анкета сохранена. Вы можете восстановить её без повторной регистрации." : "У вас уже есть профиль. Откройте «Мой профиль», чтобы изменить его.", { reply_markup: inlineKeyboard([[action], [inlineButton("⬅️ В меню", "menu:main")]]) });
     return;
   }
+  const checkpoint = await new DomainStore(ctx).get<RegistrationCheckpoint>(profileRegistrationKey(userId(ctx)));
+  if (checkpoint?.draft?.rulesAccepted) {
+    ctx.session.draft = checkpoint.draft;
+    ctx.session.telegramPrivacyNoticeShown = false;
+    begin(ctx, checkpoint.step ?? "consent");
+    await continueRegistration(ctx);
+    return;
+  }
   ctx.session.draft = { photos: [] }; ctx.session.telegramPrivacyNoticeShown = false; begin(ctx, "rules");
   await ctx.reply(RULES_TEXT, { reply_markup: rulesKeyboard() });
 });
-composer.callbackQuery("profile:rules:accept", async (ctx) => { await ctx.answerCallbackQuery(); draft(ctx).rulesAccepted = true; begin(ctx, "consent"); await ctx.reply("Серьёзные отношения начинаются с уважения. Вы ищете партнёра для серьёзных отношений и семьи?", { reply_markup: choose([[inlineButton("Да, ищу", "profile:consent:yes"), inlineButton("Пока нет", "profile:consent:no")]]) }); });
+composer.callbackQuery("profile:rules:accept", async (ctx) => { await ctx.answerCallbackQuery(); draft(ctx).rulesAccepted = true; begin(ctx, "consent"); await saveRegistrationCheckpoint(ctx); await ctx.reply("Серьёзные отношения начинаются с уважения. Вы ищете партнёра для серьёзных отношений и семьи?", { reply_markup: choose([[inlineButton("Да, ищу", "profile:consent:yes"), inlineButton("Пока нет", "profile:consent:no")]]) }); });
 composer.callbackQuery("profile:consent:yes", async (ctx) => { await ctx.answerCallbackQuery(); begin(ctx, "name"); await ctx.reply("Как вас зовут?", { reply_markup: force("Введите имя") }); });
 composer.callbackQuery("profile:consent:no", async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.editMessageText("Понимаю. Возвращайтесь, когда будете готовы к серьёзным отношениям.", { reply_markup: await mainMenuFor(ctx) }); });
 
@@ -201,7 +236,7 @@ composer.callbackQuery("profile:create:save", async (ctx) => {
   await recordPolicyAudit(ctx, decision.kind === "allowed" ? "allowed" : "allowed-with-suggestion", decision);
   if (decision.kind === "suggestion") { await ctx.reply(decision.message!, { reply_markup: previewKeyboard() }); return; }
   if (decision.kind === "explicit") { const event = await enforceViolation(ctx, decision); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.reply(blockMessage(event!), { reply_markup: await mainMenuFor(ctx) }); return; }
-  const timestamp = now(); const telegramUsername = d.telegramUsername ?? null; const usernameConfirmed = telegramUsername !== null && d.usernameConfirmed === true; const profile: Profile = { userId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, nationality: d.nationality!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, isComplete: true, accountStatus: "active", status: null, telegramUsername, telegramUsernameConfirmed: usernameConfirmed, telegram_username: telegramUsername, telegram_username_confirmed: usernameConfirmed, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
+  const timestamp = now(); const telegramUsername = d.telegramUsername ?? null; const usernameConfirmed = telegramUsername !== null && d.usernameConfirmed === true; const profile: Profile = { userId: userId(ctx), telegram_id: userId(ctx), telegramId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, nationality: d.nationality!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, isComplete: true, is_complete: true, rulesAccepted: true, rules_accepted: true, accountStatus: "active", status: null, telegramUsername, telegramUsernameConfirmed: usernameConfirmed, telegram_username: telegramUsername, telegram_username_confirmed: usernameConfirmed, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
   const store = new DomainStore(ctx);
   // The profile key is the per-Telegram-ID uniqueness boundary. Never replace
   // a deleted or active record with a newly submitted registration.
@@ -217,6 +252,7 @@ composer.callbackQuery("profile:create:save", async (ctx) => {
     await ctx.reply(d.telegramUsername ? "Ошибка: не удалось сохранить Telegram. Попробуйте ещё раз." : "Профиль готов, но хранилище пока недоступно. Попробуйте сохранить ещё раз позже.", { reply_markup: d.telegramUsername ? previewKeyboard() : menu });
     return;
   }
+  await store.delete(profileRegistrationKey(profile.userId));
   const admin = adminChatId(ctx); if (admin) { try { await ctx.api.sendMessage(admin, `Новая анкета: ${profile.name}, ${profile.age}, ${profile.city}`); } catch { /* delivery is best effort */ } }
   ctx.session.step = "idle"; ctx.session.draft = undefined;
   await ctx.reply("Профиль сохранён и опубликован. Желаю вам добрых знакомств.", { reply_markup: await mainMenuFor(ctx) });

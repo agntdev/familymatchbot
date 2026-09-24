@@ -2,6 +2,9 @@ import type { Ctx } from "./bot.js";
 
 export interface Profile {
   userId: number;
+  /** Canonical Telegram identity persisted alongside the storage key. */
+  telegram_id?: number;
+  telegramId?: number;
   name: string;
   age: number;
   gender: string;
@@ -37,6 +40,9 @@ export interface Profile {
   /** Set when the user confirms publication. Older records are inferred below. */
   isComplete?: boolean;
   is_complete?: boolean;
+  /** Persisted acceptance; rules must not be shown again for this account. */
+  rulesAccepted?: boolean;
+  rules_accepted?: boolean;
   /** User-written status badge, max 100 characters. */
   status?: string | null;
   /** Account lifecycle state; older records used status for this field. */
@@ -198,6 +204,9 @@ export class DomainStore {
 
 export function userId(ctx: { from?: { id: number } }): number { return ctx.from?.id ?? 0; }
 export function profileKey(id: number): string { return `profile:${id}`; }
+/** Durable registration checkpoint for users who have accepted the rules but
+ * have not published a complete profile yet. */
+export function profileRegistrationKey(id: number): string { return `profile-registration:${id}`; }
 
 /**
  * Decide whether a stored profile can replace the registration CTA. Explicit
@@ -206,8 +215,8 @@ export function profileKey(id: number): string { return `profile:${id}`; }
  */
 export function isProfileComplete(profile: Partial<Profile>): boolean {
   if (profileLifecycle(profile) === "deleted") return false;
-  if (profile.isComplete === true || profile.is_complete === true || profileLifecycle(profile) === "active") return true;
   if (profile.isComplete === false || profile.is_complete === false || profileLifecycle(profile) === "draft") return false;
+  if (profile.isComplete === true || profile.is_complete === true || profileLifecycle(profile) === "active") return true;
   return Boolean(
     profile.name?.trim() &&
     Number.isInteger(profile.age) && profile.age !== undefined && profile.age >= 18 &&

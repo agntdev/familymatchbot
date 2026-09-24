@@ -42,5 +42,28 @@
         ]
       }
     ]
+  },
+  {
+    "name": "accepted rules are not shown again while registration is unfinished",
+    "steps": [
+      {
+        "send": { "callback": "profile:create:start" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Правила «Никах»\n\nЗапрещены оскорбления и нецензурная лексика, спам, мошенничество, реклама, непристойный контент, ложные данные и бессмысленные или шуточные анкеты.\n\nПожалуйста, уважайте других участников и заполняйте анкету честно." } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:rules:accept" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Серьёзные отношения начинаются с уважения. Вы ищете партнёра для серьёзных отношений и семьи?" } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:manage" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Серьёзные отношения начинаются с уважения. Вы ищете партнёра для серьёзных отношений и семьи?" } }
+        ]
+      }
+    ]
   }
 ]
