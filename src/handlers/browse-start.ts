@@ -21,12 +21,14 @@ import {
   reportKey,
   reportsIndexKey,
   adminBlockedKey,
+  blockKey,
   skipsKey,
   viewedActionKey,
   viewedKey,
   userId,
   photoCaption,
   profileStatus,
+  profileLifecycle,
   type Like,
   type Match,
   type Profile,
@@ -92,6 +94,30 @@ async function markAssessed(store: DomainStore, viewer: number, candidate: numbe
   if (!viewed.includes(candidate)) await store.set(viewedKey(viewer), [...viewed, candidate]);
 }
 
+/** Migrate profiles published by older bot versions before applying discovery
+ * predicates. This is read-after-write safe: the normalized record is written
+ * to the primary store before it can enter another user's queue. */
+async function normalizePublishedProfile(store: DomainStore, profile: Profile): Promise<Profile> {
+  if (profile.isTest === true || profile.hidden === true || profile.deleted === true || profile.active === false || profileLifecycle(profile) === "hidden" || profileLifecycle(profile) === "deleted" || profileLifecycle(profile) === "draft") return profile;
+  const complete = profile.isComplete === true || profile.is_complete === true;
+  const alreadyPublished = profile.status === "published" && profile.active === true && profile.hidden === false && profile.deleted === false && profile.isTest === false && profile.is_active === true && profile.is_hidden === false && profile.is_deleted === false && profile.is_test === false;
+  if (!complete || alreadyPublished) return profile;
+  if (profile.status && !["draft", "active", "published", "hidden", "deleted"].includes(profile.status) && !profile.userStatus) profile.userStatus = profile.status;
+  profile.status = "published";
+  profile.accountStatus = "published";
+  profile.active = true;
+  profile.hidden = false;
+  profile.deleted = false;
+  profile.isTest = false;
+  profile.is_active = true;
+  profile.is_hidden = false;
+  profile.is_deleted = false;
+  profile.is_test = false;
+  await store.set(profileKey(profile.userId), profile);
+  console.info("profile published for discovery", { userId: profile.userId });
+  return profile;
+}
+
 function ageMatches(viewer: Profile | undefined, candidate: Profile): boolean {
   if (!viewer) return true;
   if (viewer.preferredAgeFrom !== undefined && candidate.age < viewer.preferredAgeFrom) return false;
@@ -101,11 +127,11 @@ function ageMatches(viewer: Profile | undefined, candidate: Profile): boolean {
 }
 
 async function excluded(store: DomainStore, viewer: number, candidate: number): Promise<boolean> {
-  if (await store.get(adminBlockedKey(viewer)) || await store.get(adminBlockedKey(candidate))) return true;
+  if (await store.get(adminBlockedKey(viewer)) || await store.get(adminBlockedKey(candidate)) || await store.get(blockKey(viewer, candidate)) || await store.get(blockKey(candidate, viewer))) return true;
   const viewerProfile = await store.get<Profile>(profileKey(viewer));
   if (viewerProfile?.blockedUserIds?.includes(candidate)) return true;
   const ownLikes = await store.get<Like[]>(likesKey(viewer)) ?? [];
-  if (ownLikes.some((like) => likeTo(like) === candidate && like.status !== "ignored")) return true;
+  if (ownLikes.some((like) => likeTo(like) === candidate)) return true;
   const skipped = await store.get<number[]>(skipsKey(viewer)) ?? [];
   if (skipped.includes(candidate)) return true;
   const viewed = await store.get<number[]>(viewedKey(viewer)) ?? [];
@@ -122,6 +148,8 @@ async function excluded(store: DomainStore, viewer: number, candidate: number): 
 }
 
 async function sendCard(ctx: Ctx, profile: Profile): Promise<void> {
+  const store = new DomainStore(ctx);
+  await markAssessed(store, userId(ctx), profile.userId);
   await recordEvent(ctx, "view", profile.userId);
   ctx.session.activeTargetId = profile.userId;
   if (profile.photos[0]) {
@@ -164,7 +192,8 @@ export async function browseProfiles(ctx: Ctx, replaceCurrent = false): Promise<
   const viewer = await store.get<Profile>(profileKey(mine));
   for (const id of ids) {
     if (id === mine) continue;
-    const profile = await store.get<Profile>(profileKey(id));
+    const stored = await store.get<Profile>(profileKey(id));
+    const profile = stored ? await normalizePublishedProfile(store, stored) : undefined;
     // Dating is intentionally permissive here. Saved city/description/username
     // data must never make a real, photo-bearing profile disappear from the
     // deck. Age and gender preferences on the viewer still define suitability;
@@ -180,8 +209,9 @@ export async function browseProfiles(ctx: Ctx, replaceCurrent = false): Promise<
 
 async function ensureTarget(ctx: Ctx, target: number): Promise<Profile | undefined> {
   const store = new DomainStore(ctx);
-  if (await store.get(adminBlockedKey(target)) || await store.get(adminBlockedKey(userId(ctx)))) return undefined;
-  const profile = await store.get<Profile>(profileKey(target));
+  if (await store.get(adminBlockedKey(target)) || await store.get(adminBlockedKey(userId(ctx))) || await store.get(blockKey(userId(ctx), target)) || await store.get(blockKey(target, userId(ctx)))) return undefined;
+  const stored = await store.get<Profile>(profileKey(target));
+  const profile = stored ? await normalizePublishedProfile(store, stored) : undefined;
   if (!isDiscoverable(profile) || target === userId(ctx)) return undefined;
   return profile;
 }
@@ -273,6 +303,7 @@ composer.callbackQuery(/^browse:view:(\d+)$/, async (ctx) => {
   const target = Number(ctx.match[1]);
   const profile = await ensureTarget(ctx, target);
   if (!profile) { await ctx.reply("Эта анкета больше недоступна.", { reply_markup: back }); return; }
+  await markAssessed(new DomainStore(ctx), userId(ctx), target);
   await recordEvent(ctx, "view", target);
   if (profile.photos.length === 0) {
     await ctx.reply(fullProfileText(profile), { reply_markup: actionKeyboard(target, true) });

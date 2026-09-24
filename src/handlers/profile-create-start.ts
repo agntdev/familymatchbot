@@ -235,7 +235,7 @@ composer.callbackQuery("profile:create:save", async (ctx) => {
   await recordPolicyAudit(ctx, decision.kind === "allowed" ? "allowed" : "allowed-with-suggestion", decision);
   if (decision.kind === "suggestion") { await ctx.reply(decision.message!, { reply_markup: previewKeyboard() }); return; }
   if (decision.kind === "explicit") { const event = await enforceViolation(ctx, decision); ctx.session.step = "idle"; ctx.session.draft = undefined; await ctx.reply(blockMessage(event!), { reply_markup: await mainMenuFor(ctx) }); return; }
-  const timestamp = now(); const telegramUsername = d.telegramUsername ?? null; const usernameConfirmed = telegramUsername !== null && d.usernameConfirmed === true; const profile: Profile = { userId: userId(ctx), telegram_id: userId(ctx), telegramId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, nationality: d.nationality!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, isComplete: true, is_complete: true, rulesAccepted: true, rules_accepted: true, accountStatus: "active", status: null, telegramUsername, telegramUsernameConfirmed: usernameConfirmed, telegram_username: telegramUsername, telegram_username_confirmed: usernameConfirmed, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
+  const timestamp = now(); const telegramUsername = d.telegramUsername ?? null; const usernameConfirmed = telegramUsername !== null && d.usernameConfirmed === true; const profile: Profile = { userId: userId(ctx), telegram_id: userId(ctx), telegramId: userId(ctx), name: d.name!, age: d.age!, gender: d.gender ?? "other", city: d.city!, photos: d.photos!, bio: d.bio!, maritalStatus: d.maritalStatus!, nationality: d.nationality!, profession: d.profession!, height: d.height!, purpose: d.purpose!, relationshipIntent: "serious", visibility: true, isComplete: true, is_complete: true, rulesAccepted: true, rules_accepted: true, accountStatus: "published", status: "published", active: true, hidden: false, deleted: false, isTest: false, is_active: true, is_hidden: false, is_deleted: false, is_test: false, telegramUsername, telegramUsernameConfirmed: usernameConfirmed, telegram_username: telegramUsername, telegram_username_confirmed: usernameConfirmed, showTelegramOnMatch: false, show_telegram_on_match: false, createdAt: timestamp, updatedAt: timestamp };
   const store = new DomainStore(ctx);
   // The profile key is the per-Telegram-ID uniqueness boundary. Never replace
   // a deleted or active record with a newly submitted registration.
@@ -246,7 +246,8 @@ composer.callbackQuery("profile:create:save", async (ctx) => {
   }
   const saved = await store.setIfAbsent(profileKey(profile.userId), profile);
   const ids = await store.get<number[]>(profileIndexKey()) ?? [];
-  if (saved && !ids.includes(profile.userId)) await store.set(profileIndexKey(), [...ids, profile.userId]);
+  const indexed = !saved || ids.includes(profile.userId) || await store.set(profileIndexKey(), [...ids, profile.userId]);
+  if (saved) console.info("profile published", { userId: profile.userId, indexed });
   if (!saved) {
     await ctx.reply(d.telegramUsername ? "Ошибка: не удалось сохранить Telegram. Попробуйте ещё раз." : "Профиль готов, но хранилище пока недоступно. Попробуйте сохранить ещё раз позже.", { reply_markup: d.telegramUsername ? previewKeyboard() : menu });
     return;
@@ -270,9 +271,17 @@ composer.callbackQuery("profile:restore", async (ctx) => {
     await ctx.reply("Ваша анкета уже активна.", { reply_markup: await mainMenuFor(ctx) });
     return;
   }
-  if (profile.status && !["draft", "active", "hidden", "deleted"].includes(profile.status) && !profile.userStatus) profile.userStatus = profile.status;
-  profile.status = "active";
-  profile.accountStatus = "active";
+  if (profile.status && !["draft", "active", "published", "hidden", "deleted"].includes(profile.status) && !profile.userStatus) profile.userStatus = profile.status;
+  profile.status = "published";
+  profile.accountStatus = "published";
+  profile.active = true;
+  profile.hidden = false;
+  profile.deleted = false;
+  profile.isTest = false;
+  profile.is_active = true;
+  profile.is_hidden = false;
+  profile.is_deleted = false;
+  profile.is_test = false;
   profile.visibility = true;
   profile.isComplete = true;
   profile.updatedAt = now();
