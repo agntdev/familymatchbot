@@ -2,7 +2,7 @@ import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import {
   DomainStore, adminBlockedKey, blockKey, blocksKey, matchA, matchB, matchesKey, matchKey,
-  messagesKey, messageEventKey, now, photoCaption, profileKey, reportKey, userId,
+  messagesKey, messageEventKey, now, photoCaption, profileKey, reportKey, userId, isDiscoverable,
   type Match, type Message, type Profile,
 } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
@@ -65,7 +65,7 @@ async function openChat(ctx: Ctx, id: string): Promise<void> {
   }
   const { store, match, other } = access;
   const profile = await store.get<Profile>(profileKey(other));
-  if (!profile) { await ctx.reply("Профиль собеседника больше недоступен.", { reply_markup: back }); return; }
+  if (!profile || !isDiscoverable(profile)) { await ctx.reply("Профиль собеседника больше недоступен.", { reply_markup: back }); return; }
   const key = match.match_id ?? match.id ?? id;
   const storedMessages = await store.get<Message[]>(messagesKey(key));
   // Opening the match creates the private thread's durable record when it does
@@ -96,7 +96,7 @@ composer.callbackQuery("conversations:list", async (ctx) => {
     const other = otherUser(match, me);
     if (await blocked(store, me, other)) continue;
     const profile = await store.get<Profile>(profileKey(other));
-    if (!profile) continue;
+    if (!profile || !isDiscoverable(profile)) continue;
     const messages = await store.get<Message[]>(messagesKey(id)) ?? [];
     const last = messages.at(-1);
     const unread = messages.filter((message) => isUnread(message, me)).length;

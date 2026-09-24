@@ -17,6 +17,7 @@ import {
   now,
   profileIndexKey,
   profileKey,
+  isDiscoverable,
   reportKey,
   reportsIndexKey,
   adminBlockedKey,
@@ -111,7 +112,7 @@ async function excluded(store: DomainStore, viewer: number, candidate: number): 
     if (match?.active && ((matchA(match) === viewer && matchB(match) === candidate) || (matchA(match) === candidate && matchB(match) === viewer))) return true;
   }
   const candidateProfile = await store.get<Profile>(profileKey(candidate));
-  return candidateProfile?.blockedUserIds?.includes(viewer) === true;
+  return !candidateProfile || !isDiscoverable(candidateProfile) || candidateProfile.blockedUserIds?.includes(viewer) === true;
 }
 
 async function sendCard(ctx: Ctx, profile: Profile): Promise<void> {
@@ -162,7 +163,7 @@ export async function browseProfiles(ctx: Ctx, replaceCurrent = false): Promise<
     // data must never make a real, photo-bearing profile disappear from the
     // deck. Age and gender preferences on the viewer still define suitability;
     // safety, visibility, and prior actions are applied by `excluded`.
-    if (!profile?.visibility || !Array.isArray(profile.photos) || profile.photos.length === 0 || !profile.photos[0] || !ageMatches(viewer, profile) || await excluded(store, mine, id)) continue;
+    if (!profile || !isDiscoverable(profile) || !Array.isArray(profile.photos) || profile.photos.length === 0 || !profile.photos[0] || !ageMatches(viewer, profile) || await excluded(store, mine, id)) continue;
     if (replaceCurrent) await replaceCard(ctx, profile);
     else await sendCard(ctx, profile);
     return;
@@ -175,7 +176,7 @@ async function ensureTarget(ctx: Ctx, target: number): Promise<Profile | undefin
   const store = new DomainStore(ctx);
   if (await store.get(adminBlockedKey(target)) || await store.get(adminBlockedKey(userId(ctx)))) return undefined;
   const profile = await store.get<Profile>(profileKey(target));
-  if (!profile || !profile.visibility || target === userId(ctx)) return undefined;
+  if (!isDiscoverable(profile) || target === userId(ctx)) return undefined;
   return profile;
 }
 
@@ -185,7 +186,7 @@ async function createMatch(ctx: Ctx, target: number): Promise<Match | undefined>
   if (me === target) return undefined;
   const mine = await store.get<Profile>(profileKey(me));
   const theirs = await store.get<Profile>(profileKey(target));
-  if (!mine || !theirs || !mine.visibility || !theirs.visibility) return undefined;
+  if (!mine || !theirs || !isDiscoverable(mine) || !isDiscoverable(theirs)) return undefined;
   if (mine.blockedUserIds?.includes(target) || theirs.blockedUserIds?.includes(me)) return undefined;
   const theirLikes = await store.get<Like[]>(likesKey(target)) ?? [];
   const theirCanonicalLike = await store.get<Like>(likeKey(target, me));

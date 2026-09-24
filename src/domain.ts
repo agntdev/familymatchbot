@@ -202,8 +202,9 @@ export function profileKey(id: number): string { return `profile:${id}`; }
  * the current registration wizard requires are present.
  */
 export function isProfileComplete(profile: Partial<Profile>): boolean {
+  if (profile.status === "deleted") return false;
   if (profile.isComplete === true || profile.is_complete === true || profile.status === "active") return true;
-  if (profile.isComplete === false || profile.is_complete === false || profile.status === "draft" || profile.status === "deleted") return false;
+  if (profile.isComplete === false || profile.is_complete === false || profile.status === "draft") return false;
   return Boolean(
     profile.name?.trim() &&
     Number.isInteger(profile.age) && profile.age !== undefined && profile.age >= 18 &&
@@ -218,6 +219,12 @@ export function isProfileComplete(profile: Partial<Profile>): boolean {
     profile.purpose?.trim() &&
     profile.relationshipIntent === "serious"
   );
+}
+
+/** Only active, visible records may enter discovery or matching flows. */
+export function isDiscoverable(profile: Partial<Profile> | undefined): boolean {
+  if (!profile || profile.status === "deleted" || profile.status === "hidden") return false;
+  return profile.visibility === true;
 }
 /** Durable username records let registration reserve a name before publishing. */
 export function telegramUsernameKey(id: number): string { return `telegram-username:${id}`; }
@@ -300,4 +307,35 @@ export function makeLike(from: number, to: number, at = now()): Like {
 export function makeMatch(a: number, b: number, at = now()): Match {
   const pair = [a, b].sort((x, y) => x - y);
   return { match_id: `${pair[0]}-${pair[1]}`, user_a_id: pair[0], user_b_id: pair[1], created_at: at, active: true };
+}
+
+/** Preserve the profile while taking it out of every relationship projection. */
+export async function deactivateProfileRelationships(store: DomainStore, id: number, profileIds: number[]): Promise<string[]> {
+  const matchIds = await store.get<string[]>(matchesKey(id)) ?? [];
+  for (const candidate of profileIds) {
+    const likes = await store.get<Like[]>(likesKey(candidate)) ?? [];
+    let changed = false;
+    for (const like of likes) {
+      if (likeFrom(like) === id || likeTo(like) === id) {
+        if (like.status !== "ignored") { like.status = "ignored"; changed = true; }
+      }
+    }
+    if (changed) await store.set(likesKey(candidate), likes);
+  }
+  const ownLikes = await store.get<Like[]>(likesKey(id)) ?? [];
+  for (const like of ownLikes) like.status = "ignored";
+  await store.set(likesKey(id), ownLikes);
+  for (const matchId of matchIds) {
+    const match = await store.get<Match>(matchKey(matchId));
+    if (!match) continue;
+    match.active = false;
+    await store.set(matchKey(matchId), match);
+    const other = matchA(match) === id ? matchB(match) : matchA(match);
+    if (other) {
+      const otherMatches = await store.get<string[]>(matchesKey(other)) ?? [];
+      await store.set(matchesKey(other), otherMatches.filter((value) => value !== matchId));
+    }
+  }
+  await store.set(matchesKey(id), []);
+  return matchIds;
 }

@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { DomainStore, matchesKey, messagesKey, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, searchFiltersKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, profileSummary, validTelegramUsername, withTelegramDefaults, type Profile } from "../domain.js";
+import { DomainStore, deactivateProfileRelationships, matchesKey, normalizeTelegramUsername, now, photoCaption, profileIndexKey, profileKey, telegramUsernameKey, telegramUsernameOwnerKey, userId, profileSummary, validTelegramUsername, withTelegramDefaults, type Profile } from "../domain.js";
 import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 import { blockMessage, enforceViolation, inspectProfileText, recordPolicyAudit } from "../content-policy.js";
 
@@ -12,7 +12,7 @@ const force = (placeholder: string) => ({ force_reply: true as const, input_fiel
 const TELEGRAM_PRIVACY_NOTICE = "🔒 До взаимной симпатии ваш Telegram не видят другие пользователи. Он станет доступен только после взаимной симпатии.";
 const fields = inlineKeyboard([[inlineButton("Имя", "profile:edit:name"), inlineButton("Возраст", "profile:edit:age")], [inlineButton("Город", "profile:edit:city"), inlineButton("Семейный статус", "profile:edit:maritalStatus")], [inlineButton("Национальность", "profile:edit:nationality"), inlineButton("Профессия", "profile:edit:profession")], [inlineButton("Рост", "profile:edit:height"), inlineButton("О себе", "profile:edit:bio")], [inlineButton("Цель знакомства", "profile:edit:purpose")], [inlineButton("Telegram", "profile:edit:telegram")], [inlineButton("⬅️ Назад", "profile:manage")]]);
 function manageKeyboard(p: Profile) { const profile = withTelegramDefaults(p); return inlineKeyboard([[inlineButton("Изменить поле", "profile:edit:fields")], [inlineButton("Управление фото", "profile:photos:manage")], [inlineButton(`Показывать мой Telegram при взаимной симпатии: ${profile.showTelegramOnMatch ? "Да" : "Нет"}`, "profile:telegram:toggle")], [inlineButton(profile.visibility ? "Скрыть профиль" : "Показать профиль", "profile:visibility:toggle")], [inlineButton("Предпросмотр", "profile:preview"), inlineButton("Удалить профиль", "profile:delete")], [inlineButton("⬅️ В меню", "menu:main")]]); }
-async function show(ctx: Ctx): Promise<void> { const stored = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx))); if (!stored) { await ctx.reply("У вас пока нет профиля — создайте его за несколько минут.", { reply_markup: inlineKeyboard([[inlineButton("Создать профиль", "profile:create:start")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; } const p = withTelegramDefaults(stored); await ctx.reply(profileSummary(p), { reply_markup: manageKeyboard(p) }); }
+async function show(ctx: Ctx): Promise<void> { const stored = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx))); if (!stored) { await ctx.reply("У вас пока нет профиля — создайте его за несколько минут.", { reply_markup: inlineKeyboard([[inlineButton("Создать профиль", "profile:create:start")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; } if (stored.status === "deleted") { await ctx.reply("Анкета сохранена, но сейчас скрыта.", { reply_markup: inlineKeyboard([[inlineButton("♻️ Восстановить анкету", "profile:restore")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; } const p = withTelegramDefaults(stored); await ctx.reply(profileSummary(p), { reply_markup: manageKeyboard(p) }); }
 composer.callbackQuery("profile:manage", async (ctx) => { await ctx.answerCallbackQuery(); await show(ctx); });
 composer.callbackQuery("profile:edit:fields", async (ctx) => { await ctx.answerCallbackQuery(); await ctx.editMessageText("Что хотите изменить?", { reply_markup: fields }); });
 composer.callbackQuery("profile:edit:maritalStatus", async (ctx) => { await ctx.answerCallbackQuery(); await ctx.reply("Выберите семейный статус.", { reply_markup: inlineKeyboard([[inlineButton("Не был(а) в браке", "profile:marital:set:single")], [inlineButton("В отношениях", "profile:marital:set:relationship")], [inlineButton("Разведён(а)", "profile:marital:set:divorced")], [inlineButton("Вдовец или вдова", "profile:marital:set:widowed")]]) }); });
@@ -79,18 +79,17 @@ composer.callbackQuery("profile:photo:add", async (ctx) => { await ctx.answerCal
 composer.on("message:photo", async (ctx, next) => { if (ctx.session.step !== "photos") { await next(); return; } const p = await new DomainStore(ctx).get<Profile>(profileKey(userId(ctx))); const photo = ctx.message.photo.at(-1); if (!p || !photo) { await ctx.reply("Не удалось добавить фото. Попробуйте ещё раз."); return; } if (p.photos.length >= 6) { await ctx.reply("Можно добавить не больше 6 фотографий."); return; } p.photos.push(photo.file_id); p.updatedAt = now(); await new DomainStore(ctx).set(profileKey(p.userId), p); ctx.session.step = "idle"; await ctx.reply("Фото добавлено и профиль обновлён.", { reply_markup: inlineKeyboard([[inlineButton("Управление фото", "profile:photos:manage")], [inlineButton("Мой профиль", "profile:manage")]]) }); });
 composer.callbackQuery(/^profile:photo:delete:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const i = Number(ctx.match[1]); const store = new DomainStore(ctx); const p = await store.get<Profile>(profileKey(userId(ctx))); if (!p || i < 0 || i >= p.photos.length) { await ctx.reply("Это фото уже недоступно."); return; } if (p.photos.length === 1) { await ctx.reply("Оставьте хотя бы одну фотографию."); return; } p.photos.splice(i, 1); p.updatedAt = now(); await store.set(profileKey(p.userId), p); await ctx.editMessageText("Фото удалено. Профиль обновлён.", { reply_markup: inlineKeyboard([[inlineButton("Управление фото", "profile:photos:manage")], [inlineButton("Мой профиль", "profile:manage")]]) }); });
 composer.callbackQuery(/^profile:photo:primary:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const i = Number(ctx.match[1]); const store = new DomainStore(ctx); const p = await store.get<Profile>(profileKey(userId(ctx))); if (!p || i < 0 || i >= p.photos.length) { await ctx.reply("Это фото уже недоступно."); return; } const [photo] = p.photos.splice(i, 1); p.photos.unshift(photo); p.updatedAt = now(); await store.set(profileKey(p.userId), p); await ctx.editMessageText("Главное фото обновлено.", { reply_markup: inlineKeyboard([[inlineButton("Управление фото", "profile:photos:manage")], [inlineButton("Мой профиль", "profile:manage")]]) }); });
-composer.callbackQuery("profile:delete", async (ctx) => { await ctx.answerCallbackQuery(); await ctx.reply("Удалить профиль и все связанные данные? Это нельзя отменить.", { reply_markup: inlineKeyboard([[inlineButton("Удалить профиль", "profile:delete:confirm"), inlineButton("Оставить", "profile:manage")]]) }); });
+composer.callbackQuery("profile:delete", async (ctx) => { await ctx.answerCallbackQuery(); await ctx.reply("Скрыть профиль? Данные сохранятся, и вы сможете восстановить анкету позже.", { reply_markup: inlineKeyboard([[inlineButton("Скрыть профиль", "profile:delete:confirm"), inlineButton("Оставить", "profile:manage")]]) }); });
 composer.callbackQuery("profile:delete:confirm", async (ctx) => {
   await ctx.answerCallbackQuery();
   const id = userId(ctx);
   const store = new DomainStore(ctx);
   const p = await store.get<Profile>(profileKey(id));
   const profileIds = await store.get<number[]>(profileIndexKey()) ?? [];
-  const matchIds = await store.get<string[]>(matchesKey(id)) ?? [];
-  for (const candidate of profileIds) {
-    if (candidate === id) continue;
-    const likes = await store.get<Array<{ from_user_id?: number; to_user_id?: number; from?: number; to?: number }>>(`likes:${candidate}`) ?? [];
-    await store.set(`likes:${candidate}`, likes.filter((like) => (like.to_user_id ?? like.to) !== id && (like.from_user_id ?? like.from) !== id));
+  const matchIds = await deactivateProfileRelationships(store, id, profileIds);
+  for (const candidate of profileIds) if (candidate !== id) {
+    const otherMatches = await store.get<string[]>(matchesKey(candidate)) ?? [];
+    await store.set(matchesKey(candidate), otherMatches.filter((matchId) => !matchIds.includes(matchId)));
   }
   for (const matchId of matchIds) {
     const match = await store.get<{ user_a_id?: number; user_b_id?: number }>(`match:${matchId}`);
@@ -100,17 +99,18 @@ composer.callbackQuery("profile:delete:confirm", async (ctx) => {
       await store.set(matchesKey(other), otherMatches.filter((value) => value !== matchId));
       try { await ctx.api.sendMessage(other, "Пользователь удалил профиль. Этот разговор больше недоступен."); } catch { /* blocked users are safe to ignore */ }
     }
-    await store.delete(messagesKey(matchId));
-    await store.delete(`match:${matchId}`);
   }
-  await store.delete(profileKey(id));
-  await store.delete(searchFiltersKey(id));
-  await store.delete(`likes:${id}`);
-  await store.delete(matchesKey(id));
+  if (p) {
+    p.status = "deleted";
+    p.visibility = false;
+    p.isComplete = true;
+    p.updatedAt = now();
+    await store.set(profileKey(id), p);
+  }
   await store.set(profileIndexKey(), profileIds.filter((candidate) => candidate !== id));
   const admin = adminChatId(ctx);
   if (admin) { try { await ctx.api.sendMessage(admin, `Пользователь удалил профиль${p ? `: ${p.name}` : "."}`); } catch { /* best effort */ } }
   ctx.session.step = "idle";
-  await ctx.reply("Профиль удалён. Спасибо, что доверяли нам.", { reply_markup: menu });
+  await ctx.reply("Профиль скрыт. Ваши данные сохранены — вы сможете восстановить анкету из главного меню.", { reply_markup: menu });
 });
 export default composer;
